@@ -1,0 +1,49 @@
+app:
+  env: development
+
+http:
+  host: 0.0.0.0
+  port: 8000
+
+database:
+  url: postgres://comet:comet@localhost:5432/comet?sslmode=disable
+
+redis:
+  addr: localhost:6379
+
+elasticsearch:
+  url: http://localhost:9200
+
+neo4j:
+  uri: bolt://124.222.103.82:7687
+  username: "neo4j"
+  password: "boxify@2026"
+  database: "boxify"
+
+jwt:
+  secret: change-me
+
+secret_key: 0123456789abcdef0123456789abcdef
+
+storage:
+  backend: local
+  dir: ./storage
+
+llm:
+  provider: openai
+  model: gpt-4o-mini
+  embedding_model: text-embedding-3-small
+  base_url: https://api.openai.com/v1
+  api_key: ""
+
+
+rag:
+    embedding_dims: 1024
+
+memory:
+    name_sim_gate: 0.8
+    llm_merge_confidence: 0.8
+    community_clustering_max_iterations: 10
+    community_vote_sem_weight: 0.6
+    community_vote_rel_weight: 0.4
+    community_merge_threshold: 0.85
