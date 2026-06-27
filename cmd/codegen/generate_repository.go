@@ -28,8 +28,9 @@ func GenerateRepository(opts RepositoryOptions) (Report, error) {
 	if !info.HasID {
 		return report, fmt.Errorf("codegen repository: model %s must have ID uuid.UUID", opts.Model)
 	}
-	if !info.HasUserID {
-		return report, fmt.Errorf("codegen repository: model %s must have UserID uuid.UUID", opts.Model)
+	scope, err := repositoryScopeFor(info, opts.Scope)
+	if err != nil {
+		return report, err
 	}
 	label := opts.Label
 	if strings.TrimSpace(label) == "" {
@@ -39,7 +40,7 @@ func GenerateRepository(opts RepositoryOptions) (Report, error) {
 	if err := generateRepositoryInterface(opts.Root, info, &report); err != nil {
 		return report, err
 	}
-	if err := generatePostgresRepository(opts.Root, info, label, &report); err != nil {
+	if err := generatePostgresRepository(opts.Root, info, label, scope, &report); err != nil {
 		return report, err
 	}
 	return report, nil
@@ -117,7 +118,7 @@ func repositoryUpdateFields(info ModelInfo) string {
 	return b.String()
 }
 
-func generatePostgresRepository(root string, info ModelInfo, label string, report *Report) error {
+func generatePostgresRepository(root string, info ModelInfo, label string, scope RepositoryScope, report *Report) error {
 	path := filepath.Join(root, "internal", "repository", "postgres", snakeCase(info.Name)+".go")
 	if fileExists(path) {
 		report.Add(FileSkipped, path)
@@ -126,6 +127,7 @@ func generatePostgresRepository(root string, info ModelInfo, label string, repor
 
 	modelVar := lowerFirst(info.Name)
 	orderColumn := repositoryOrderColumn(info)
+	tableName := snakeCase(info.Name) + "s"
 	imports := []string{
 		`"context"`,
 		`"errors"`,
@@ -144,7 +146,7 @@ func New%[1]sRepository(db *gorm.DB) repository.%[1]sRepository {
 }
 
 func (r *%[1]sRepository) Create(ctx context.Context, userID uuid.UUID, %[2]s *models.%[1]s) (*models.%[1]s, error) {
-	%[2]s.UserID = userID
+%[5]s
 	if err := r.db.WithContext(ctx).Create(%[2]s).Error; err != nil {
 		return nil, xerr.Wrapf(err, "创建%[4]s失败")
 	}
@@ -154,8 +156,7 @@ func (r *%[1]sRepository) Create(ctx context.Context, userID uuid.UUID, %[2]s *m
 func (r *%[1]sRepository) List(ctx context.Context, userID uuid.UUID) ([]*models.%[1]s, error) {
 	var rows []*models.%[1]s
 
-	err := r.db.WithContext(ctx).
-		Where("user_id = ?", userID).
+	err := r.db.WithContext(ctx).%[6]s
 		Order("%[3]s DESC").
 		Find(&rows).Error
 	if err != nil {
@@ -167,8 +168,7 @@ func (r *%[1]sRepository) List(ctx context.Context, userID uuid.UUID) ([]*models
 
 func (r *%[1]sRepository) FindByID(ctx context.Context, userID uuid.UUID, %[2]sID uuid.UUID) (*models.%[1]s, error) {
 	%[2]s := &models.%[1]s{}
-	err := r.db.WithContext(ctx).
-		Where("id = ? AND user_id = ?", %[2]sID, userID).
+	err := r.db.WithContext(ctx).%[7]s
 		First(%[2]s).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, xerr.NotFound("%[4]s不存在")
@@ -182,7 +182,7 @@ func (r *%[1]sRepository) FindByID(ctx context.Context, userID uuid.UUID, %[2]sI
 func (r *%[1]sRepository) Update(ctx context.Context, userID uuid.UUID, %[2]s *models.%[1]s) (*models.%[1]s, error) {
 	result := r.db.WithContext(ctx).
 		Model(&models.%[1]s{}).
-		Where("id = ? AND user_id = ?", %[2]s.ID, userID).
+%[8]s
 		Omit("id", "user_id", "user", "created_at", "updated_at").
 		Updates(%[2]s)
 	if result.Error != nil {
@@ -201,7 +201,7 @@ func (r *%[1]sRepository) UpdateFields(ctx context.Context, userID uuid.UUID, %[
 	}
 	result := r.db.WithContext(ctx).
 		Model(&models.%[1]s{}).
-		Where("id = ? AND user_id = ?", %[2]sID, userID).
+%[9]s
 		Select(columns).
 		Updates(%[2]s)
 	if result.Error != nil {
@@ -215,7 +215,7 @@ func (r *%[1]sRepository) UpdateFields(ctx context.Context, userID uuid.UUID, %[
 
 func (r *%[1]sRepository) Delete(ctx context.Context, userID uuid.UUID, %[2]sID uuid.UUID) error {
 	result := r.db.WithContext(ctx).
-		Where("id = ? AND user_id = ?", %[2]sID, userID).
+%[10]s
 		Delete(&models.%[1]s{})
 	if result.Error != nil {
 		return xerr.Wrapf(result.Error, "删除%[4]s失败")
@@ -225,7 +225,14 @@ func (r *%[1]sRepository) Delete(ctx context.Context, userID uuid.UUID, %[2]sID 
 	}
 	return nil
 }
-`, info.Name, modelVar, orderColumn, label)
+`, info.Name, modelVar, orderColumn, label,
+		createScopeSnippet(scope, info, modelVar, label),
+		listScopeSnippet(scope, tableName),
+		findScopeSnippet(scope, tableName, modelVar),
+		updateScopeSnippet(scope, tableName, modelVar, modelVar+".ID"),
+		updateScopeSnippet(scope, tableName, modelVar, modelVar+"ID"),
+		updateScopeSnippet(scope, tableName, modelVar, modelVar+"ID"),
+	)
 	return writeNewGeneratedFile(path, generatedFile("postgres", imports, body, true), report)
 }
 
@@ -237,6 +244,108 @@ func repositoryOrderColumn(info ModelInfo) string {
 		return "created_at"
 	}
 	return "id"
+}
+
+func repositoryScopeFor(info ModelInfo, raw string) (RepositoryScope, error) {
+	raw = strings.TrimSpace(raw)
+	if info.HasUserID && raw == "" {
+		return RepositoryScope{Kind: "direct", UserColumn: "user_id"}, nil
+	}
+	if raw == "" {
+		return RepositoryScope{}, fmt.Errorf("codegen repository: model %s must have UserID uuid.UUID or provide -scope local_column:table.column:user_column", info.Name)
+	}
+	scope, err := parseRepositoryScope(raw)
+	if err != nil {
+		return RepositoryScope{}, err
+	}
+	if !modelHasColumn(info, scope.LocalColumn) {
+		return RepositoryScope{}, fmt.Errorf("codegen repository: model %s does not have scope local column %s", info.Name, scope.LocalColumn)
+	}
+	return scope, nil
+}
+
+func parseRepositoryScope(raw string) (RepositoryScope, error) {
+	parts := strings.Split(raw, ":")
+	if len(parts) != 3 {
+		return RepositoryScope{}, fmt.Errorf("codegen repository: invalid scope %q, want local_column:table.column:user_column", raw)
+	}
+	join := strings.Split(parts[1], ".")
+	if len(join) != 2 {
+		return RepositoryScope{}, fmt.Errorf("codegen repository: invalid scope %q, want local_column:table.column:user_column", raw)
+	}
+	scope := RepositoryScope{
+		Kind:        "join",
+		LocalColumn: strings.TrimSpace(parts[0]),
+		JoinTable:   strings.TrimSpace(join[0]),
+		JoinColumn:  strings.TrimSpace(join[1]),
+		UserColumn:  strings.TrimSpace(parts[2]),
+	}
+	if scope.LocalColumn == "" || scope.JoinTable == "" || scope.JoinColumn == "" || scope.UserColumn == "" {
+		return RepositoryScope{}, fmt.Errorf("codegen repository: invalid scope %q, want local_column:table.column:user_column", raw)
+	}
+	return scope, nil
+}
+
+func modelHasColumn(info ModelInfo, column string) bool {
+	for _, field := range info.Fields {
+		if field.Column == column {
+			return true
+		}
+	}
+	return false
+}
+
+func createScopeSnippet(scope RepositoryScope, info ModelInfo, modelVar string, label string) string {
+	if scope.Kind == "direct" {
+		return fmt.Sprintf("\t%s.UserID = userID", modelVar)
+	}
+	fieldName := fieldNameByColumn(info, scope.LocalColumn)
+	return fmt.Sprintf(`	var scopeCount int64
+	if err := r.db.WithContext(ctx).
+		Table(%q).
+		Where("%s = ? AND %s = ?", %s.%s, userID).
+		Count(&scopeCount).Error; err != nil {
+		return nil, xerr.Wrapf(err, "校验数据归属失败")
+	}
+	if scopeCount == 0 {
+		return nil, xerr.NotFound("%s不存在")
+	}`, scope.JoinTable, scope.JoinColumn, scope.UserColumn, modelVar, fieldName, label)
+}
+
+func listScopeSnippet(scope RepositoryScope, tableName string) string {
+	if scope.Kind == "direct" {
+		return "\n\t\tWhere(\"user_id = ?\", userID)."
+	}
+	return fmt.Sprintf(`
+		Joins("JOIN %s ON %s.%s = %s.%s").
+		Where("%s.%s = ?", userID).`, scope.JoinTable, tableName, scope.LocalColumn, scope.JoinTable, scope.JoinColumn, scope.JoinTable, scope.UserColumn)
+}
+
+func findScopeSnippet(scope RepositoryScope, tableName string, modelVar string) string {
+	if scope.Kind == "direct" {
+		return fmt.Sprintf("\n\t\tWhere(\"id = ? AND user_id = ?\", %sID, userID).", modelVar)
+	}
+	return fmt.Sprintf(`
+		Joins("JOIN %s ON %s.%s = %s.%s").
+		Where("%s.id = ?", %sID).
+		Where("%s.%s = ?", userID).`, scope.JoinTable, tableName, scope.LocalColumn, scope.JoinTable, scope.JoinColumn, tableName, modelVar, scope.JoinTable, scope.UserColumn)
+}
+
+func updateScopeSnippet(scope RepositoryScope, tableName string, modelVar string, idExpr string) string {
+	if scope.Kind == "direct" {
+		return fmt.Sprintf("\t\tWhere(\"id = ? AND user_id = ?\", %s, userID).", idExpr)
+	}
+	return fmt.Sprintf(`		Where("id = ?", %s).
+		Where("EXISTS (SELECT 1 FROM %s WHERE %s.%s = %s.%s AND %s.%s = ?)", userID).`, idExpr, scope.JoinTable, scope.JoinTable, scope.JoinColumn, tableName, scope.LocalColumn, scope.JoinTable, scope.UserColumn)
+}
+
+func fieldNameByColumn(info ModelInfo, column string) string {
+	for _, field := range info.Fields {
+		if field.Column == column {
+			return field.Name
+		}
+	}
+	return ""
 }
 
 func updatableModelFields(info ModelInfo) []ModelField {

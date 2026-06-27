@@ -1339,9 +1339,86 @@ type Book struct {
 	if err == nil {
 		t.Fatal("GenerateRepository error = nil, want missing UserID error")
 	}
-	if !strings.Contains(err.Error(), "must have UserID uuid.UUID") {
+	if !strings.Contains(err.Error(), "must have UserID uuid.UUID or provide -scope local_column:table.column:user_column") {
 		t.Fatalf("GenerateRepository error = %v", err)
 	}
+}
+
+func TestGenerateRepositoryCreatesJoinScopedRepository(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "internal/models/message.go", `package models
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type Message struct {
+	ID             uuid.UUID      `+"`gorm:\"column:id;type:uuid;primaryKey\"`"+`
+	ConversationID uuid.UUID      `+"`gorm:\"column:conversation_id;type:uuid;not null;index\"`"+`
+	Conversation   Conversation   `+"`gorm:\"foreignKey:ConversationID;references:ID;constraint:OnDelete:CASCADE\"`"+`
+	Role           string         `+"`gorm:\"column:role;size:16;not null\"`"+`
+	SenderPersonID uuid.UUID      `+"`gorm:\"column:sender_person_id;type:uuid\"`"+`
+	SenderUserID   uuid.UUID      `+"`gorm:\"column:sender_user_id;type:uuid\"`"+`
+	MetaData       map[string]any `+"`gorm:\"column:meta_data;type:jsonb\"`"+`
+	CreatedAt      time.Time      `+"`gorm:\"column:created_at;autoCreateTime\"`"+`
+}
+`)
+
+	report, err := GenerateRepository(RepositoryOptions{
+		Root:  root,
+		Model: "Message",
+		Label: "消息",
+		Scope: "conversation_id:conversations.id:user_id",
+	})
+	if err != nil {
+		t.Fatalf("GenerateRepository error = %v", err)
+	}
+
+	repoFile := readFile(t, root, "internal/repository/message.go")
+	for _, want := range []string{
+		"type MessageRepository interface",
+		"Create(ctx context.Context, userID uuid.UUID, message *models.Message) (*models.Message, error)",
+		"func (f *MessageUpdateFields) Role() *MessageUpdateFields",
+		"func (f *MessageUpdateFields) SenderPersonID() *MessageUpdateFields",
+		"func (f *MessageUpdateFields) SenderUserID() *MessageUpdateFields",
+		"func (f *MessageUpdateFields) MetaData() *MessageUpdateFields",
+	} {
+		if !strings.Contains(repoFile, want) {
+			t.Fatalf("repository file missing %q:\n%s", want, repoFile)
+		}
+	}
+	for _, notWant := range []string{
+		"func (f *MessageUpdateFields) ID()",
+		"func (f *MessageUpdateFields) Conversation()",
+		"func (f *MessageUpdateFields) CreatedAt()",
+	} {
+		if strings.Contains(repoFile, notWant) {
+			t.Fatalf("repository file should not contain %q:\n%s", notWant, repoFile)
+		}
+	}
+
+	postgresFile := readFile(t, root, "internal/repository/postgres/message.go")
+	for _, want := range []string{
+		"Joins(\"JOIN conversations ON messages.conversation_id = conversations.id\")",
+		"Where(\"conversations.user_id = ?\", userID)",
+		"Where(\"messages.id = ?\", messageID)",
+		"EXISTS (SELECT 1 FROM conversations WHERE conversations.id = messages.conversation_id AND conversations.user_id = ?)",
+		"Where(\"id = ? AND user_id = ?\", message.ConversationID, userID)",
+		"xerr.NotFound(\"消息不存在\")",
+		"Order(\"created_at DESC\")",
+	} {
+		if !strings.Contains(postgresFile, want) {
+			t.Fatalf("postgres repository file missing %q:\n%s", want, postgresFile)
+		}
+	}
+	if strings.Contains(postgresFile, "message.UserID = userID") {
+		t.Fatalf("join-scoped repository should not assign UserID:\n%s", postgresFile)
+	}
+
+	assertReportContains(t, report, FileAdded, "internal/repository/message.go")
+	assertReportContains(t, report, FileAdded, "internal/repository/postgres/message.go")
 }
 
 func TestGenerateRepositorySkipsExistingFiles(t *testing.T) {

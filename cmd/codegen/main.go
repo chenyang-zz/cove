@@ -50,6 +50,7 @@ func runRepositoryCommand(args []string) (Report, error) {
 	root := fs.String("root", ".", "project root")
 	model := fs.String("model", "", "GORM model name")
 	label := fs.String("label", "", "human readable model label for errors")
+	scope := fs.String("scope", "", "repository user scope, format local_column:table.column:user_column")
 	noColor := fs.Bool("no-color", false, "disable colored output")
 	if err := fs.Parse(args); err != nil {
 		return Report{}, err
@@ -59,6 +60,7 @@ func runRepositoryCommand(args []string) (Report, error) {
 		Root:  *root,
 		Model: *model,
 		Label: *label,
+		Scope: *scope,
 	})
 	if err != nil {
 		return report, err
@@ -70,7 +72,7 @@ func runRepositoryCommand(args []string) (Report, error) {
 func printUsage(w *os.File) {
 	fmt.Fprintln(w, "usage:")
 	fmt.Fprintln(w, "  codegen route [-root .] [-no-color]")
-	fmt.Fprintln(w, "  codegen repository -model Model [-label 名称] [-root .] [-no-color]")
+	fmt.Fprintln(w, "  codegen repository -model Model [-label 名称] [-scope local_column:table.column:user_column] [-root .] [-no-color]")
 }
 
 func GenerateRoutes(root string) (Report, error) {

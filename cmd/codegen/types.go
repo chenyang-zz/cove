@@ -99,6 +99,15 @@ type RepositoryOptions struct {
 	Root  string
 	Model string
 	Label string
+	Scope string
+}
+
+type RepositoryScope struct {
+	Kind        string
+	LocalColumn string
+	JoinTable   string
+	JoinColumn  string
+	UserColumn  string
 }
 
 type ModelInfo struct {
