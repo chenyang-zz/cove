@@ -21,3 +21,20 @@ type ConversationResponse struct {
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
+
+type MessageMetaData struct {
+	ImageKeys  []string `json:"image_keys,omitempty"`
+	SenderName string   `json:"sender_name,omitempty"`
+}
+
+type MessageResponse struct {
+	ID             uuid.UUID        `json:"id"`
+	Role           string           `json:"role"`
+	Content        string           `json:"content"`
+	MetaData       *MessageMetaData `json:"meta_data"`
+	Images         []string         `json:"images"`
+	SenderPersonID *uuid.UUID       `json:"sender_person_id"`
+	SenderName     *string          `json:"sender_name"`
+	Feedback       *string          `json:"feedback"`
+	CreatedAt      time.Time        `json:"created_at"`
+}

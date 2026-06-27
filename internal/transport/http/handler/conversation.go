@@ -91,3 +91,26 @@ func (h ConversationHandler) DeleteConversation(c *gin.Context) {
 	}
 	response.OK(c, nil)
 }
+
+func (h ConversationHandler) ListMessages(c *gin.Context) {
+	var query request.UriConversationIDRequest
+	if err := c.ShouldBindUri(&query); err != nil {
+		response.FromError(c, xerr.Validation(err))
+		return
+	}
+	if err := c.ShouldBindQuery(&query); err != nil {
+		response.FromError(c, xerr.Validation(err))
+		return
+	}
+	userID, err := util.UserIDFromContext(c.Request.Context())
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	out, err := conversationlogic.NewListMessagesLogic(c.Request.Context(), h.svc).ListMessages(userID, &query)
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	response.OK(c, out)
+}

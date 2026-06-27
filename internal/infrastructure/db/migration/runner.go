@@ -40,6 +40,8 @@ func (r *Runner) Up(ctx context.Context) error {
 		&models.RefreshToken{},
 		&models.ModelConfig{},
 		&models.Conversation{},
+		&models.Message{},
+		&models.MessageFeedback{},
 	); err != nil {
 		return xerr.Wrapf(err, "执行 GORM migration 失败")
 	}

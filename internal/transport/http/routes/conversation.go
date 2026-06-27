@@ -28,4 +28,9 @@ func RegisterConversationRoutes(api *gin.RouterGroup, conversation handler.Conve
 	// @input request.UriConversationIDRequest
 	conversationRoutes.DELETE("/:conversation_id", conversation.DeleteConversation)
 	conversationRoutes.POST("/:conversation_id/delete", conversation.DeleteConversation)
+	// @auth(user_id)
+	// @description 获取消息列表
+	// @input request.UriConversationIDRequest
+	// @response ListResponse[*response.MessageResponse]
+	conversationRoutes.GET("/:conversation_id/messages", conversation.ListMessages)
 }

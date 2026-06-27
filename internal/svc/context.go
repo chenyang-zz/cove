@@ -28,12 +28,15 @@ type ServiceContext struct {
 	Redis         *infraredis.Client
 	Elasticsearch *infraes.Client
 	Storage       storage.Store
+	URLSigner     storage.URLSigner
 
-	UserRepo         repository.UserRepository
-	RefreshTokenRepo repository.RefreshTokenRepository
-	MemoryGraphRepo  repository.MemoryGraphRepository
-	ModelConfigRepo  repository.ModelConfigRepository
-	ConversationRepo repository.ConversationRepository
+	UserRepo            repository.UserRepository
+	RefreshTokenRepo    repository.RefreshTokenRepository
+	MemoryGraphRepo     repository.MemoryGraphRepository
+	ModelConfigRepo     repository.ModelConfigRepository
+	ConversationRepo    repository.ConversationRepository
+	MessageRepo         repository.MessageRepository
+	MessageFeedbackRepo repository.MessageFeedbackRepository
 
 	SecretCipher *security.SecretCipher
 	TokenIssuer  *security.TokenIssuer
@@ -61,16 +64,20 @@ func New(ctx context.Context, cfg config.Config) (*ServiceContext, error) {
 	refreshTokenRepo := repositorypostgres.NewRefreshTokenRepository(db)
 	modelConfigRepo := repositorypostgres.NewModelConfigRepository(db)
 	conversationRepo := repositorypostgres.NewConversationRepository(db)
+	messageRepo := repositorypostgres.NewMessageRepository(db)
+	messageFeedbackRepo := repositorypostgres.NewMessageFeedbackRepository(db)
 
 	svcCtx := &ServiceContext{
 		Config: cfg,
 
 		GormDB: db,
 
-		UserRepo:         userRepo,
-		RefreshTokenRepo: refreshTokenRepo,
-		ModelConfigRepo:  modelConfigRepo,
-		ConversationRepo: conversationRepo,
+		UserRepo:            userRepo,
+		RefreshTokenRepo:    refreshTokenRepo,
+		ModelConfigRepo:     modelConfigRepo,
+		ConversationRepo:    conversationRepo,
+		MessageRepo:         messageRepo,
+		MessageFeedbackRepo: messageFeedbackRepo,
 
 		SecretCipher: cipher,
 		TokenIssuer:  security.NewTokenIssuer(cfg.JWT.Secret, accessTokenTTL),
@@ -100,12 +107,13 @@ func New(ctx context.Context, cfg config.Config) (*ServiceContext, error) {
 	}
 	svcCtx.Elasticsearch = esClient
 
-	store, err := BuildStorage(cfg.Storage)
+	store, urlSigner, err := BuildStorage(cfg.Storage)
 	if err != nil {
 		_ = svcCtx.Close(ctx)
 		return nil, err
 	}
 	svcCtx.Storage = store
+	svcCtx.URLSigner = urlSigner
 
 	if shouldInitNeo4j(cfg.Neo4j) {
 		neo4jClient, err := dbneo4j.NewClient(ctx, dbneo4j.Config{
@@ -163,21 +171,25 @@ func shouldInitNeo4j(cfg config.Neo4jConfig) bool {
 	return cfg.URI != "" && cfg.Username != "" && cfg.Password != ""
 }
 
-func BuildStorage(cfg config.StorageConfig) (storage.Store, error) {
+func BuildStorage(cfg config.StorageConfig) (storage.Store, storage.URLSigner, error) {
 	switch cfg.Backend {
 	case "", "local":
-		return storage.NewLocalStore(cfg.Dir), nil
+		return storage.NewLocalStore(cfg.Dir), nil, nil
 	case "cos":
 		if cfg.COS.BucketURL == "" || cfg.COS.SecretID == "" || cfg.COS.SecretKey == "" {
-			return nil, xerr.BadRequest("COS 存储配置无效")
+			return nil, nil, xerr.BadRequest("COS 存储配置无效")
 		}
-		return storage.NewCOSStore(storage.COSConfig{
+		store, err := storage.NewCOSStore(storage.COSConfig{
 			BucketURL: cfg.COS.BucketURL,
 			SecretID:  cfg.COS.SecretID,
 			SecretKey: cfg.COS.SecretKey,
 			BaseURL:   cfg.COS.BaseURL,
 		})
+		if err != nil {
+			return nil, nil, err
+		}
+		return store, store, nil
 	default:
-		return nil, xerr.BadRequest("存储 backend 配置无效")
+		return nil, nil, xerr.BadRequest("存储 backend 配置无效")
 	}
 }
