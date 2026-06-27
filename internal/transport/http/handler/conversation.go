@@ -73,3 +73,21 @@ func (h ConversationHandler) RenameConversation(c *gin.Context) {
 	}
 	response.OK(c, out)
 }
+
+func (h ConversationHandler) DeleteConversation(c *gin.Context) {
+	var body request.UriConversationIDRequest
+	if err := c.ShouldBindUri(&body); err != nil {
+		response.FromError(c, xerr.Validation(err))
+		return
+	}
+	userID, err := util.UserIDFromContext(c.Request.Context())
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	if err := conversationlogic.NewDeleteConversationLogic(c.Request.Context(), h.svc).DeleteConversation(userID, &body); err != nil {
+		response.FromError(c, err)
+		return
+	}
+	response.OK(c, nil)
+}

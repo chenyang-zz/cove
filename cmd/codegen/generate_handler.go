@@ -177,7 +177,7 @@ func handlerURIBindTarget(route Route, inputVar string, requestDTOs map[string]R
 		return "&" + inputVar, nil
 	}
 	if len(dto.EmbeddedURIOnly) > 1 {
-		return "", fmt.Errorf("routegen: %s.%s input %s has multiple embedded URI-only request DTOs: %s", route.HandlerType, route.HandlerMethod, route.Directive.Input, strings.Join(dto.EmbeddedURIOnly, ", "))
+		return "", fmt.Errorf("codegen: %s.%s input %s has multiple embedded URI-only request DTOs: %s", route.HandlerType, route.HandlerMethod, route.Directive.Input, strings.Join(dto.EmbeddedURIOnly, ", "))
 	}
 	if len(dto.EmbeddedURIOnly) == 1 && !dto.IsURIOnly {
 		return "&" + inputVar + "." + dto.EmbeddedURIOnly[0], nil

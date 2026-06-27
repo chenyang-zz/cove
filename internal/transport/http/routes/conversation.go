@@ -23,4 +23,9 @@ func RegisterConversationRoutes(api *gin.RouterGroup, conversation handler.Conve
 	// @response ConversationResponse
 	conversationRoutes.PATCH("/:conversation_id", conversation.RenameConversation)
 	conversationRoutes.POST("/:conversation_id/rename", conversation.RenameConversation)
+	// @auth(user_id)
+	// @description 删除会话
+	// @input request.UriConversationIDRequest
+	conversationRoutes.DELETE("/:conversation_id", conversation.DeleteConversation)
+	conversationRoutes.POST("/:conversation_id/delete", conversation.DeleteConversation)
 }

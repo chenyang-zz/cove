@@ -43,7 +43,7 @@ func writeGeneratedFile(path, content string, report *Report) error {
 	}
 	if data, err := os.ReadFile(path); err == nil {
 		if !strings.HasPrefix(string(data), generatedHeader) {
-			return fmt.Errorf("refuse to overwrite non-routegen file %s", path)
+			return fmt.Errorf("refuse to overwrite non-codegen file %s", path)
 		}
 		if bytes.Equal(data, formatted) {
 			report.Add(FileUnchanged, path)
@@ -195,7 +195,7 @@ func replaceRange(src []byte, start, end int, text string) []byte {
 }
 
 func printReport(w io.Writer, report Report, color bool) {
-	fmt.Fprintln(w, "routegen:")
+	fmt.Fprintln(w, "codegen:")
 	if len(report.Files) == 0 {
 		fmt.Fprintln(w, colorize("  = no files changed", ansiGray, color))
 		return

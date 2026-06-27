@@ -274,7 +274,7 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMidd
 }
 `)
 
-	report, err := Generate(root)
+	report, err := GenerateRoutes(root)
 	if err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
@@ -334,7 +334,7 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler) {
 }
 `)
 
-	if _, err := Generate(root); err != nil {
+	if _, err := GenerateRoutes(root); err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
 
@@ -370,7 +370,7 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler) {
 }
 `)
 
-	if _, err := Generate(root); err != nil {
+	if _, err := GenerateRoutes(root); err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
 
@@ -403,7 +403,7 @@ func RegisterConversationRoutes(api *gin.RouterGroup, conversation handler.Conve
 }
 `)
 
-	if _, err := Generate(root); err != nil {
+	if _, err := GenerateRoutes(root); err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
 
@@ -442,7 +442,7 @@ func RegisterConversationRoutes(api *gin.RouterGroup, conversation handler.Conve
 }
 `)
 
-	if _, err := Generate(root); err != nil {
+	if _, err := GenerateRoutes(root); err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
 
@@ -472,7 +472,7 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler) {
 }
 `)
 
-	if _, err := Generate(root); err != nil {
+	if _, err := GenerateRoutes(root); err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
 
@@ -501,7 +501,7 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMidd
 }
 `)
 
-	if _, err := Generate(root); err != nil {
+	if _, err := GenerateRoutes(root); err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
 
@@ -536,7 +536,7 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMidd
 }
 `)
 
-	if _, err := Generate(root); err != nil {
+	if _, err := GenerateRoutes(root); err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
 
@@ -583,7 +583,7 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMidd
 }
 `)
 
-	if _, err := Generate(root); err != nil {
+	if _, err := GenerateRoutes(root); err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
 
@@ -633,7 +633,7 @@ func RegisterConversationRoutes(api *gin.RouterGroup, conversation handler.Conve
 }
 `)
 
-	if _, err := Generate(root); err != nil {
+	if _, err := GenerateRoutes(root); err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
 
@@ -674,7 +674,7 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMidd
 }
 `)
 
-	if _, err := Generate(root); err != nil {
+	if _, err := GenerateRoutes(root); err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
 
@@ -715,7 +715,7 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMidd
 }
 `)
 
-	if _, err := Generate(root); err != nil {
+	if _, err := GenerateRoutes(root); err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
 
@@ -759,7 +759,7 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMidd
 }
 `)
 
-	if _, err := Generate(root); err != nil {
+	if _, err := GenerateRoutes(root); err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
 
@@ -807,7 +807,7 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMidd
 }
 `)
 
-	if _, err := Generate(root); err != nil {
+	if _, err := GenerateRoutes(root); err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
 
@@ -860,7 +860,7 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMidd
 }
 `)
 
-	if _, err := Generate(root); err != nil {
+	if _, err := GenerateRoutes(root); err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
 
@@ -905,7 +905,7 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler) {
 }
 `)
 
-	if _, err := Generate(root); err != nil {
+	if _, err := GenerateRoutes(root); err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
 
@@ -947,7 +947,7 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler) {
 }
 `)
 
-	_, err := Generate(root)
+	_, err := GenerateRoutes(root)
 	if err == nil {
 		t.Fatal("Generate error = nil, want multiple embedded URI-only error")
 	}
@@ -980,7 +980,7 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMidd
 }
 `)
 
-	if _, err := Generate(root); err != nil {
+	if _, err := GenerateRoutes(root); err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
 
@@ -1009,7 +1009,7 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMidd
 }
 `)
 
-	if _, err := Generate(root); err != nil {
+	if _, err := GenerateRoutes(root); err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
 
@@ -1035,7 +1035,7 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMidd
 }
 `)
 
-	if _, err := Generate(root); err != nil {
+	if _, err := GenerateRoutes(root); err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
 
@@ -1098,7 +1098,7 @@ type ShowLogic struct{}
 `
 	writeFile(t, root, "internal/logic/book/show.go", existingLogic)
 
-	report, err := Generate(root)
+	report, err := GenerateRoutes(root)
 	if err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
@@ -1136,7 +1136,7 @@ type BookHandler struct {
 }
 `)
 
-	report, err := Generate(root)
+	report, err := GenerateRoutes(root)
 	if err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
@@ -1171,7 +1171,7 @@ type BookHandler struct {
 }
 `)
 
-	if _, err := Generate(root); err != nil {
+	if _, err := GenerateRoutes(root); err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
 
@@ -1199,7 +1199,7 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler) {
 }
 `)
 
-	report, err := Generate(root)
+	report, err := GenerateRoutes(root)
 	if err != nil {
 		t.Fatalf("Generate error = %v", err)
 	}
@@ -1207,7 +1207,7 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler) {
 		t.Fatalf("first report = %+v, want added handler", report)
 	}
 
-	report, err = Generate(root)
+	report, err = GenerateRoutes(root)
 	if err != nil {
 		t.Fatalf("second Generate error = %v", err)
 	}
@@ -1243,6 +1243,136 @@ func TestPrintReportUsesColorAndCanDisableColor(t *testing.T) {
 	if !strings.Contains(plainOut, "+ internal/transport/http/handler/book.go") {
 		t.Fatalf("plain output missing added file:\n%s", plainOut)
 	}
+}
+
+func TestGenerateRepositoryCreatesConversationStyleRepository(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "internal/models/book.go", `package models
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type User struct {
+	ID uuid.UUID `+"`gorm:\"column:id;type:uuid;primaryKey\"`"+`
+}
+
+type Book struct {
+	ID        uuid.UUID `+"`gorm:\"column:id;type:uuid;primaryKey\"`"+`
+	UserID    uuid.UUID `+"`gorm:\"column:user_id;type:uuid;not null;index\"`"+`
+	User      User      `+"`gorm:\"foreignKey:UserID;references:ID;constraint:OnDelete:CASCADE\"`"+`
+	Title     string    `+"`gorm:\"column:title;size:255;not null\"`"+`
+	IsPublic  bool      `+"`gorm:\"column:is_public;not null;default:false\"`"+`
+	CreatedAt time.Time `+"`gorm:\"column:created_at;autoCreateTime\"`"+`
+	UpdatedAt time.Time `+"`gorm:\"column:updated_at;autoUpdateTime\"`"+`
+}
+`)
+
+	report, err := GenerateRepository(RepositoryOptions{Root: root, Model: "Book", Label: "图书"})
+	if err != nil {
+		t.Fatalf("GenerateRepository error = %v", err)
+	}
+
+	repoFile := readFile(t, root, "internal/repository/book.go")
+	for _, want := range []string{
+		"// Code generated by codegen; DO NOT EDIT.",
+		"type BookRepository interface",
+		"Create(ctx context.Context, userID uuid.UUID, book *models.Book) (*models.Book, error)",
+		"UpdateFields(ctx context.Context, userID uuid.UUID, bookID uuid.UUID, book *models.Book, fields *BookUpdateFields) (*models.Book, error)",
+		"func NewBookUpdateFields() *BookUpdateFields",
+		"func (f *BookUpdateFields) Title() *BookUpdateFields",
+		"return f.add(\"title\")",
+		"func (f *BookUpdateFields) IsPublic() *BookUpdateFields",
+		"return f.add(\"is_public\")",
+	} {
+		if !strings.Contains(repoFile, want) {
+			t.Fatalf("repository file missing %q:\n%s", want, repoFile)
+		}
+	}
+	for _, notWant := range []string{
+		"func (f *BookUpdateFields) ID()",
+		"func (f *BookUpdateFields) UserID()",
+		"func (f *BookUpdateFields) User()",
+		"func (f *BookUpdateFields) CreatedAt()",
+		"func (f *BookUpdateFields) UpdatedAt()",
+	} {
+		if strings.Contains(repoFile, notWant) {
+			t.Fatalf("repository file should not contain %q:\n%s", notWant, repoFile)
+		}
+	}
+
+	postgresFile := readFile(t, root, "internal/repository/postgres/book.go")
+	for _, want := range []string{
+		"type BookRepository struct",
+		"func NewBookRepository(db *gorm.DB) repository.BookRepository",
+		"book.UserID = userID",
+		"Where(\"id = ? AND user_id = ?\", bookID, userID)",
+		"Order(\"updated_at DESC\")",
+		"xerr.NotFound(\"图书不存在\")",
+		"xerr.Wrapf(err, \"创建图书失败\")",
+		"Select(columns)",
+		"Delete(&models.Book{})",
+	} {
+		if !strings.Contains(postgresFile, want) {
+			t.Fatalf("postgres repository file missing %q:\n%s", want, postgresFile)
+		}
+	}
+
+	assertReportContains(t, report, FileAdded, "internal/repository/book.go")
+	assertReportContains(t, report, FileAdded, "internal/repository/postgres/book.go")
+}
+
+func TestGenerateRepositoryRequiresUserScopedUUIDModel(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "internal/models/book.go", `package models
+
+import "github.com/google/uuid"
+
+type Book struct {
+	ID uuid.UUID `+"`gorm:\"column:id;type:uuid;primaryKey\"`"+`
+}
+`)
+
+	_, err := GenerateRepository(RepositoryOptions{Root: root, Model: "Book"})
+	if err == nil {
+		t.Fatal("GenerateRepository error = nil, want missing UserID error")
+	}
+	if !strings.Contains(err.Error(), "must have UserID uuid.UUID") {
+		t.Fatalf("GenerateRepository error = %v", err)
+	}
+}
+
+func TestGenerateRepositorySkipsExistingFiles(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "internal/models/book.go", `package models
+
+import "github.com/google/uuid"
+
+type Book struct {
+	ID     uuid.UUID `+"`gorm:\"column:id;type:uuid;primaryKey\"`"+`
+	UserID uuid.UUID `+"`gorm:\"column:user_id;type:uuid;not null;index\"`"+`
+	Title  string    `+"`gorm:\"column:title\"`"+`
+}
+`)
+	existingRepo := "package repository\n\n// custom repository\n"
+	existingPostgres := "package postgres\n\n// custom postgres repository\n"
+	writeFile(t, root, "internal/repository/book.go", existingRepo)
+	writeFile(t, root, "internal/repository/postgres/book.go", existingPostgres)
+
+	report, err := GenerateRepository(RepositoryOptions{Root: root, Model: "Book"})
+	if err != nil {
+		t.Fatalf("GenerateRepository error = %v", err)
+	}
+	if got := readFile(t, root, "internal/repository/book.go"); got != existingRepo {
+		t.Fatalf("existing repository changed:\n%s", got)
+	}
+	if got := readFile(t, root, "internal/repository/postgres/book.go"); got != existingPostgres {
+		t.Fatalf("existing postgres repository changed:\n%s", got)
+	}
+	assertReportContains(t, report, FileSkipped, "internal/repository/book.go")
+	assertReportContains(t, report, FileSkipped, "internal/repository/postgres/book.go")
 }
 
 func assertReportContains(t *testing.T, report Report, kind FileChangeKind, path string) {
