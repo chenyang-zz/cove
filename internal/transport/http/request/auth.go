@@ -1,5 +1,7 @@
 package request
 
+import "mime/multipart"
+
 type RegisterRequest struct {
 	Username string  `json:"username" binding:"required,min=1,max=64"`
 	Nickname *string `json:"nickname" binding:"omitempty,max=64"`
@@ -25,4 +27,8 @@ type ProfileRequest struct {
 type PasswordRequest struct {
 	OldPassword string `json:"old_password"`
 	NewPassword string `json:"new_password" binding:"required,min=6,max=255"`
+}
+
+type FileRequest struct {
+	File *multipart.FileHeader `form:"file" binding:"required"`
 }

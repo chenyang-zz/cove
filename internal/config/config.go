@@ -39,11 +39,17 @@ type DatabaseConfig struct {
 }
 
 type RedisConfig struct {
-	Addr string `yaml:"addr"`
+	Addr     string `yaml:"addr"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+	DB       int    `yaml:"db"`
 }
 
 type ElasticsearchConfig struct {
-	URL string `yaml:"url"`
+	URL      string `yaml:"url"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+	APIKey   string `yaml:"api_key"`
 }
 
 type Neo4jConfig struct {
@@ -59,8 +65,16 @@ type JWTConfig struct {
 }
 
 type StorageConfig struct {
-	Backend string `yaml:"backend"`
-	Dir     string `yaml:"dir"`
+	Backend string    `yaml:"backend"`
+	Dir     string    `yaml:"dir"`
+	COS     COSConfig `yaml:"cos"`
+}
+
+type COSConfig struct {
+	BucketURL string `yaml:"bucket_url"`
+	SecretID  string `yaml:"secret_id"`
+	SecretKey string `yaml:"secret_key"`
+	BaseURL   string `yaml:"base_url"`
 }
 
 type LLMConfig struct {
@@ -148,7 +162,13 @@ func applyEnv(cfg *Config) {
 	cfg.HTTP.Port = envInt("APP_PORT", cfg.HTTP.Port)
 	cfg.Database.URL = env("DATABASE_URL", cfg.Database.URL)
 	cfg.Redis.Addr = env("REDIS_ADDR", cfg.Redis.Addr)
+	cfg.Redis.Username = env("REDIS_USERNAME", cfg.Redis.Username)
+	cfg.Redis.Password = env("REDIS_PASSWORD", cfg.Redis.Password)
+	cfg.Redis.DB = envInt("REDIS_DB", cfg.Redis.DB)
 	cfg.Elasticsearch.URL = env("ES_HOST", cfg.Elasticsearch.URL)
+	cfg.Elasticsearch.Username = env("ES_USERNAME", cfg.Elasticsearch.Username)
+	cfg.Elasticsearch.Password = env("ES_PASSWORD", cfg.Elasticsearch.Password)
+	cfg.Elasticsearch.APIKey = env("ES_API_KEY", cfg.Elasticsearch.APIKey)
 	cfg.Neo4j.URI = env("NEO4J_URI", cfg.Neo4j.URI)
 	cfg.Neo4j.Username = env("NEO4J_USERNAME", cfg.Neo4j.Username)
 	cfg.Neo4j.Password = env("NEO4J_PASSWORD", cfg.Neo4j.Password)
@@ -158,6 +178,10 @@ func applyEnv(cfg *Config) {
 	cfg.SecretKey = env("SECRET_KEY", cfg.SecretKey)
 	cfg.Storage.Backend = env("STORAGE_BACKEND", cfg.Storage.Backend)
 	cfg.Storage.Dir = env("STORAGE_DIR", cfg.Storage.Dir)
+	cfg.Storage.COS.BucketURL = env("COS_BUCKET_URL", cfg.Storage.COS.BucketURL)
+	cfg.Storage.COS.SecretID = env("COS_SECRET_ID", cfg.Storage.COS.SecretID)
+	cfg.Storage.COS.SecretKey = env("COS_SECRET_KEY", cfg.Storage.COS.SecretKey)
+	cfg.Storage.COS.BaseURL = env("COS_BASE_URL", cfg.Storage.COS.BaseURL)
 	cfg.LLM.Provider = env("LLM_PROVIDER", cfg.LLM.Provider)
 	cfg.LLM.Model = env("LLM_MODEL", cfg.LLM.Model)
 	cfg.LLM.EmbeddingModel = env("LLM_EMBEDDING_MODEL", cfg.LLM.EmbeddingModel)

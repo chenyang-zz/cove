@@ -3,6 +3,7 @@ package http_test
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -45,8 +46,32 @@ type testModelConfigRepository struct {
 }
 
 func (r *testModelConfigRepository) Create(ctx context.Context, row *models.ModelConfig) (*models.ModelConfig, error) {
+	if row.ID == uuid.Nil {
+		row.ID = uuid.New()
+	}
 	r.rows = append(r.rows, row)
 	return row, nil
+}
+
+func (r *testModelConfigRepository) Update(ctx context.Context, row *models.ModelConfig) (*models.ModelConfig, error) {
+	for i, existing := range r.rows {
+		if existing.ID == row.ID {
+			r.rows[i] = row
+			return row, nil
+		}
+	}
+	r.rows = append(r.rows, row)
+	return row, nil
+}
+
+func (r *testModelConfigRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	for i, row := range r.rows {
+		if row.ID == id {
+			r.rows = append(r.rows[:i], r.rows[i+1:]...)
+			return nil
+		}
+	}
+	return nil
 }
 
 func (r *testModelConfigRepository) List(ctx context.Context, userID uuid.UUID, modelType *domain.ModelType) ([]*models.ModelConfig, error) {
@@ -57,6 +82,15 @@ func (r *testModelConfigRepository) List(ctx context.Context, userID uuid.UUID, 
 		}
 	}
 	return out, nil
+}
+
+func (r *testModelConfigRepository) FindByID(ctx context.Context, userID uuid.UUID, configID uuid.UUID) (*models.ModelConfig, error) {
+	for _, row := range r.rows {
+		if row.ID == configID && row.UserID == userID {
+			return row, nil
+		}
+	}
+	return nil, xerr.NotFound("模型配置不存在")
 }
 
 type testUserRepository struct {
@@ -164,8 +198,25 @@ func TestRouterHealthUsesUnifiedResponse(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
-	if got := strings.TrimSpace(w.Body.String()); got != `{"code":0,"message":"ok","data":{"status":"ok"}}` {
-		t.Fatalf("body = %s", got)
+	var got struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Data    struct {
+			List []struct {
+				ServerName string `json:"server_name"`
+				IsHealthy  bool   `json:"is_healthy"`
+				Error      string `json:"error"`
+			} `json:"list"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal body: %v", err)
+	}
+	if got.Code != 0 || got.Message != "ok" {
+		t.Fatalf("body = %+v, want success envelope", got)
+	}
+	if len(got.Data.List) != 5 {
+		t.Fatalf("health list len = %d, want 5", len(got.Data.List))
 	}
 }
 

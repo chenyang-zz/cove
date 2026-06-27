@@ -82,6 +82,14 @@ func NormalizeOptional(value *string, lower bool) *string {
 	return &normalized
 }
 
+// AssignIfNotEmpty 在 src 非 nil 且非空字符串时，将 src 的值赋给 dst。
+func AssignIfNotEmpty(dst *string, src *string) {
+	if dst == nil || src == nil || *src == "" {
+		return
+	}
+	*dst = *src
+}
+
 func normalizeText(value string) string {
 	return NormalizeRequired(value)
 }

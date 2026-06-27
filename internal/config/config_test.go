@@ -36,8 +36,14 @@ database:
   url: postgres://yaml
 redis:
   addr: redis:6379
+  username: redis-user
+  password: redis-password
+  db: 2
 elasticsearch:
   url: http://es:9200
+  username: es-user
+  password: es-password
+  api_key: es-api-key
 neo4j:
   uri: bolt://neo4j:7687
   username: neo4j
@@ -48,8 +54,13 @@ jwt:
   access_token_ttl: 2h
 secret_key: 12345678901234567890123456789012
 storage:
-  backend: local
+  backend: cos
   dir: /data/storage
+  cos:
+    bucket_url: https://bucket.cos.ap-guangzhou.myqcloud.com
+    secret_id: yaml-secret-id
+    secret_key: yaml-secret-key
+    base_url: https://cdn.example.com
 llm:
   provider: openai
   model: gpt-4o-mini
@@ -69,6 +80,15 @@ llm:
 	if cfg.Database.URL != "postgres://yaml" || cfg.Redis.Addr != "redis:6379" {
 		t.Fatalf("cfg database/redis = %#v", cfg)
 	}
+	if cfg.Redis.Username != "redis-user" || cfg.Redis.Password != "redis-password" || cfg.Redis.DB != 2 {
+		t.Fatalf("cfg redis detail = %#v", cfg.Redis)
+	}
+	if cfg.Elasticsearch.URL != "http://es:9200" || cfg.Elasticsearch.Username != "es-user" || cfg.Elasticsearch.Password != "es-password" || cfg.Elasticsearch.APIKey != "es-api-key" {
+		t.Fatalf("cfg elasticsearch = %#v", cfg.Elasticsearch)
+	}
+	if cfg.Storage.Backend != "cos" || cfg.Storage.Dir != "/data/storage" || cfg.Storage.COS.BucketURL != "https://bucket.cos.ap-guangzhou.myqcloud.com" || cfg.Storage.COS.SecretID != "yaml-secret-id" || cfg.Storage.COS.SecretKey != "yaml-secret-key" || cfg.Storage.COS.BaseURL != "https://cdn.example.com" {
+		t.Fatalf("cfg storage = %#v", cfg.Storage)
+	}
 	if cfg.Neo4j.URI != "bolt://neo4j:7687" || cfg.Neo4j.Username != "neo4j" || cfg.Neo4j.Password != "yaml-password" || cfg.Neo4j.Database != "yaml-db" {
 		t.Fatalf("cfg neo4j = %#v", cfg.Neo4j)
 	}
@@ -86,7 +106,13 @@ func TestLoadFileEnvOverridesYAML(t *testing.T) {
 	t.Setenv("APP_PORT", "9100")
 	t.Setenv("DATABASE_URL", "postgres://env")
 	t.Setenv("REDIS_ADDR", "env-redis:6379")
+	t.Setenv("REDIS_USERNAME", "env-redis-user")
+	t.Setenv("REDIS_PASSWORD", "env-redis-password")
+	t.Setenv("REDIS_DB", "3")
 	t.Setenv("ES_HOST", "http://env-es:9200")
+	t.Setenv("ES_USERNAME", "env-es-user")
+	t.Setenv("ES_PASSWORD", "env-es-password")
+	t.Setenv("ES_API_KEY", "env-es-api-key")
 	t.Setenv("NEO4J_URI", "bolt://env-neo4j:7687")
 	t.Setenv("NEO4J_USERNAME", "env-user")
 	t.Setenv("NEO4J_PASSWORD", "env-password")
@@ -96,6 +122,10 @@ func TestLoadFileEnvOverridesYAML(t *testing.T) {
 	t.Setenv("SECRET_KEY", "abcdefghijklmnopqrstuvwxyz123456")
 	t.Setenv("STORAGE_BACKEND", "env-storage")
 	t.Setenv("STORAGE_DIR", "/env/storage")
+	t.Setenv("COS_BUCKET_URL", "https://env-bucket.cos.ap-guangzhou.myqcloud.com")
+	t.Setenv("COS_SECRET_ID", "env-cos-secret-id")
+	t.Setenv("COS_SECRET_KEY", "env-cos-secret-key")
+	t.Setenv("COS_BASE_URL", "https://env-cdn.example.com")
 	t.Setenv("LLM_PROVIDER", "deepseek")
 	t.Setenv("LLM_MODEL", "deepseek-chat")
 	t.Setenv("LLM_EMBEDDING_MODEL", "deepseek-embed")
@@ -134,6 +164,15 @@ llm:
 	}
 	if cfg.Database.URL != "postgres://env" || cfg.Redis.Addr != "env-redis:6379" {
 		t.Fatalf("env override database/redis failed: %#v", cfg)
+	}
+	if cfg.Redis.Username != "env-redis-user" || cfg.Redis.Password != "env-redis-password" || cfg.Redis.DB != 3 {
+		t.Fatalf("env override redis detail failed: %#v", cfg.Redis)
+	}
+	if cfg.Elasticsearch.URL != "http://env-es:9200" || cfg.Elasticsearch.Username != "env-es-user" || cfg.Elasticsearch.Password != "env-es-password" || cfg.Elasticsearch.APIKey != "env-es-api-key" {
+		t.Fatalf("env override elasticsearch failed: %#v", cfg.Elasticsearch)
+	}
+	if cfg.Storage.COS.BucketURL != "https://env-bucket.cos.ap-guangzhou.myqcloud.com" || cfg.Storage.COS.SecretID != "env-cos-secret-id" || cfg.Storage.COS.SecretKey != "env-cos-secret-key" || cfg.Storage.COS.BaseURL != "https://env-cdn.example.com" {
+		t.Fatalf("env override cos failed: %#v", cfg.Storage)
 	}
 	if cfg.Neo4j.URI != "bolt://env-neo4j:7687" || cfg.Neo4j.Username != "env-user" || cfg.Neo4j.Password != "env-password" || cfg.Neo4j.Database != "env-db" {
 		t.Fatalf("env override neo4j failed: %#v", cfg.Neo4j)

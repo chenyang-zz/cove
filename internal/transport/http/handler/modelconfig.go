@@ -55,3 +55,63 @@ func (h ModelConfigHandler) CreateModel(c *gin.Context) {
 	}
 	response.OK(c, out)
 }
+
+func (h ModelConfigHandler) UpdateModel(c *gin.Context) {
+	var body request.UpdateModelRequest
+	if err := c.ShouldBindUri(&body); err != nil {
+		response.FromError(c, xerr.Validation(err))
+		return
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.FromError(c, xerr.Validation(err))
+		return
+	}
+	userID, err := util.UserIDFromContext(c.Request.Context())
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	out, err := modelconfiglogic.NewUpdateModelLogic(c.Request.Context(), h.svc).UpdateModel(userID, &body)
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	response.OK(c, out)
+}
+
+func (h ModelConfigHandler) DeleteModel(c *gin.Context) {
+	var body request.UriConfigIDRequest
+	if err := c.ShouldBindUri(&body); err != nil {
+		response.FromError(c, xerr.Validation(err))
+		return
+	}
+	userID, err := util.UserIDFromContext(c.Request.Context())
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	if err := modelconfiglogic.NewDeleteModelLogic(c.Request.Context(), h.svc).DeleteModel(userID, &body); err != nil {
+		response.FromError(c, err)
+		return
+	}
+	response.OK(c, nil)
+}
+
+func (h ModelConfigHandler) SetModelDefault(c *gin.Context) {
+	var body request.UriConfigIDRequest
+	if err := c.ShouldBindUri(&body); err != nil {
+		response.FromError(c, xerr.Validation(err))
+		return
+	}
+	userID, err := util.UserIDFromContext(c.Request.Context())
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	out, err := modelconfiglogic.NewSetModelDefaultLogic(c.Request.Context(), h.svc).SetModelDefault(userID, &body)
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	response.OK(c, out)
+}

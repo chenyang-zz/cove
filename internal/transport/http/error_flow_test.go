@@ -1,6 +1,7 @@
 package http_test
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"log/slog"
@@ -51,11 +52,45 @@ func TestPanicRecoveryReturnsUnifiedErrorAndLogsStack(t *testing.T) {
 		t.Fatalf("body = %s", w.Body.String())
 	}
 
-	var row map[string]any
-	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &row); err != nil {
-		t.Fatalf("panic log should be JSON: %v; out=%q", err, buf.String())
+	rows := decodeJSONLogRows(t, buf.Bytes())
+	var panicRow map[string]any
+	httpErrorCount := 0
+	for _, row := range rows {
+		switch row["msg"] {
+		case "panic_recovered":
+			panicRow = row
+		case "http_error":
+			httpErrorCount++
+		}
 	}
-	if row["stack"] == "" || row["panic"] == "" {
-		t.Fatalf("panic log missing stack/panic: %#v", row)
+	if panicRow == nil || panicRow["stack"] == "" || panicRow["panic"] == "" {
+		t.Fatalf("panic log missing stack/panic: %#v", rows)
 	}
+	if httpErrorCount != 0 {
+		t.Fatalf("panic recovery logged duplicate http_error count=%d rows=%#v", httpErrorCount, rows)
+	}
+}
+
+func decodeJSONLogRows(t *testing.T, data []byte) []map[string]any {
+	t.Helper()
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	var rows []map[string]any
+	for scanner.Scan() {
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		var row map[string]any
+		if err := json.Unmarshal(line, &row); err != nil {
+			t.Fatalf("panic log should be JSON: %v; line=%q out=%q", err, string(line), string(data))
+		}
+		rows = append(rows, row)
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("scan logs: %v", err)
+	}
+	if len(rows) == 0 {
+		t.Fatalf("no log rows; out=%q", string(data))
+	}
+	return rows
 }

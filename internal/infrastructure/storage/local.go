@@ -14,6 +14,10 @@ func NewLocalStore(root string) LocalStore {
 	return LocalStore{root: root}
 }
 
+func (s LocalStore) Ping(ctx context.Context) error {
+	return os.MkdirAll(s.root, 0o755)
+}
+
 func (s LocalStore) Put(ctx context.Context, key string, data []byte) error {
 	path := filepath.Join(s.root, filepath.Clean(key))
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

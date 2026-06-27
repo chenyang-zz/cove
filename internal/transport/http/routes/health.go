@@ -6,6 +6,6 @@ import (
 )
 
 func RegisterHealthRoutes(api *gin.RouterGroup, health handler.HealthHandler) {
-	api.GET("/hello", health.Hello)
+	// routegen: output=response.HealthResponse
 	api.GET("/health", health.Health)
 }

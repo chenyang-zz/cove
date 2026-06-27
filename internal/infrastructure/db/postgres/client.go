@@ -42,6 +42,10 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 }
 
 func (c *Client) Verify(ctx context.Context) error {
+	return c.Ping(ctx)
+}
+
+func (c *Client) Ping(ctx context.Context) error {
 	if c == nil || c.pool == nil {
 		return xerr.BadRequest("Postgres 客户端未初始化")
 	}

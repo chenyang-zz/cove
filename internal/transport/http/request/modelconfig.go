@@ -14,3 +14,16 @@ type CreateModelRequest struct {
 	Capability []string `json:"capability" form:"capability" binding:"omitempty"`
 	IsDefault  bool     `json:"is_default" form:"is_default,default=false"`
 }
+
+type UriConfigIDRequest struct {
+	ConfigID string `uri:"config_id" binding:"required"`
+}
+
+type UpdateModelRequest struct {
+	UriConfigIDRequest
+	Name       *string  `json:"name" form:"name" binding:"omitempty,min=1,max=128"`
+	ModelName  *string  `json:"model_name" form:"model_name" binding:"omitempty,min=1,max=128"`
+	ApiKey     *string  `json:"api_key" form:"api_key" binding:"omitempty,min=1"`
+	BaseUrl    *string  `json:"base_url" form:"base_url" binding:"omitempty,min=1,max=255"`
+	Capability []string `json:"capability" form:"capability" binding:"omitempty"`
+}

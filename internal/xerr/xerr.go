@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"runtime"
+	"strings"
 )
 
 type Kind string
@@ -26,6 +28,13 @@ type AppError struct {
 	HTTPStatus  int
 	Cause       error
 	Fields      map[string]any
+	Location    *Location
+}
+
+type Location struct {
+	File string
+	Line int
+	Func string
 }
 
 func (e *AppError) Error() string {
@@ -84,6 +93,7 @@ func newAppError(kind Kind, code int, safeMessage string, cause error) error {
 		SafeMessage: safeMessage,
 		HTTPStatus:  status,
 		Cause:       cause,
+		Location:    callerLocation(),
 	}
 }
 
@@ -174,7 +184,30 @@ func From(err error) *AppError {
 		SafeMessage: defaultMessageForKind(KindInternal),
 		HTTPStatus:  http.StatusInternalServerError,
 		Cause:       err,
+		Location:    callerLocation(),
 	}
+}
+
+func callerLocation() *Location {
+	var pcs [16]uintptr
+	n := runtime.Callers(2, pcs[:])
+	frames := runtime.CallersFrames(pcs[:n])
+	for {
+		frame, more := frames.Next()
+		if !strings.Contains(frame.Function, "/internal/xerr.") &&
+			!strings.Contains(frame.Function, "/internal/xerr/") &&
+			!strings.HasSuffix(frame.File, "/internal/xerr/xerr.go") {
+			return &Location{
+				File: frame.File,
+				Line: frame.Line,
+				Func: frame.Function,
+			}
+		}
+		if !more {
+			break
+		}
+	}
+	return nil
 }
 
 func ToHTTP(err error) (status int, code int, message string) {

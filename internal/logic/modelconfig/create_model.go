@@ -5,7 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/boxify/api-go/internal/infrastructure/security"
-	"github.com/boxify/api-go/internal/models"
+	"github.com/boxify/api-go/internal/mapper"
 	"github.com/boxify/api-go/internal/observability/xlog"
 	"github.com/boxify/api-go/internal/svc"
 	"github.com/boxify/api-go/internal/transport/http/request"
@@ -35,32 +35,9 @@ func (l *CreateModelLogic) CreateModel(userID uuid.UUID, input *request.CreateMo
 		return nil, xerr.Internal("模型 API Key 加密失败", err)
 	}
 
-	model := models.ModelConfig{
-		UserID:          userID,
-		Type:            input.Type,
-		Provider:        input.Provider,
-		Name:            input.Name,
-		ModelName:       input.ModelName,
-		APIKeyEncrypted: apiKeyEncrypted,
-		BaseURL:         input.BaseUrl,
-		Capability:      models.StringList(input.Capability),
-		IsDefault:       input.IsDefault,
-	}
-
-	row, err := l.svcCtx.ModelConfigRepo.Create(l.ctx, &model)
+	row, err := l.svcCtx.ModelConfigRepo.Create(l.ctx, mapper.NewModelConfigFromCreate(userID, input, apiKeyEncrypted))
 	if err != nil {
 		return nil, err
 	}
-	return &response.ModelResponse{
-		ID:           row.ID,
-		Type:         row.Type,
-		Provider:     row.Provider,
-		Name:         row.Name,
-		ModelName:    row.ModelName,
-		APIKeyMasked: security.MaskSecret(input.ApiKey),
-		BaseURL:      row.BaseURL,
-		Capability:   []string(row.Capability),
-		IsDefault:    row.IsDefault,
-		CreatedAt:    row.CreatedAt,
-	}, nil
+	return mapper.ModelConfigToResponse(row, security.MaskSecret(input.ApiKey)), nil
 }

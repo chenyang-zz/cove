@@ -21,4 +21,5 @@ type UserResponse struct {
 	Email     *string   `json:"email"`
 	Avatar    *string   `json:"avatar"`
 	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at,omitempty'"`
 }

@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/boxify/api-go/internal/xerr"
 	neo4jdriver "github.com/neo4j/neo4j-go-driver/v6/neo4j"
 )
 
@@ -41,6 +42,16 @@ func TestNormalizeDatabaseTrimsAndAllowsDefault(t *testing.T) {
 	}
 }
 
+func TestPingRejectsUninitializedClient(t *testing.T) {
+	err := (&Client{}).Ping(context.Background())
+	if err == nil {
+		t.Fatal("Ping returned nil error")
+	}
+	if xerr.From(err).Kind != xerr.KindBadRequest {
+		t.Fatalf("error kind = %s, want %s", xerr.From(err).Kind, xerr.KindBadRequest)
+	}
+}
+
 func TestClientIntegrationWhenNeo4jEnvIsConfigured(t *testing.T) {
 	uri := os.Getenv("NEO4J_TEST_URI")
 	username := os.Getenv("NEO4J_TEST_USERNAME")
@@ -67,6 +78,9 @@ func TestClientIntegrationWhenNeo4jEnvIsConfigured(t *testing.T) {
 
 	if err := client.Verify(ctx); err != nil {
 		t.Fatalf("Verify error = %v", err)
+	}
+	if err := client.Ping(ctx); err != nil {
+		t.Fatalf("Ping error = %v", err)
 	}
 
 	writeRows, err := client.Write(ctx, "CREATE (n:CodexNeo4jClientTest {id: $id}) RETURN n.id AS id", map[string]any{"id": "neo4j-client-test"})

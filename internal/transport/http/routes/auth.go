@@ -16,4 +16,6 @@ func RegisterAuthRoutes(api *gin.RouterGroup, auth handler.AuthHandler, authMidd
 	authRoutes.PUT("/profile", authMiddleware, auth.Profile)
 	// routegen: auth user_id input=request.PasswordRequest
 	authRoutes.POST("/password", authMiddleware, auth.Password)
+	// routegen: auth user_id input=request.FileRequest output=response.UserResponse
+	authRoutes.POST("/avatar", authMiddleware, auth.UpdateAvatar)
 }

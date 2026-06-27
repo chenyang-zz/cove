@@ -28,3 +28,17 @@ func NewGormDB(ctx context.Context, cfg Config) (*gorm.DB, error) {
 	}
 	return db, nil
 }
+
+func PingGormDB(ctx context.Context, db *gorm.DB) error {
+	if db == nil {
+		return xerr.BadRequest("GORM Postgres 连接未初始化")
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		return xerr.Wrapf(err, "获取 GORM 底层数据库连接失败")
+	}
+	if err := sqlDB.PingContext(ctx); err != nil {
+		return xerr.Wrapf(err, "验证 GORM Postgres 连接失败")
+	}
+	return nil
+}

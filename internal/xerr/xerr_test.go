@@ -2,6 +2,7 @@ package xerr_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/boxify/api-go/internal/xerr"
@@ -78,5 +79,46 @@ func TestFormattedErrors(t *testing.T) {
 	_, _, msg = xerr.ToHTTP(wrapped)
 	if msg != "解析模型配置 cfg1 失败" {
 		t.Fatalf("wrapf message = %q", msg)
+	}
+}
+
+func TestAppErrorCapturesCallLocation(t *testing.T) {
+	err := xerr.BadRequest("参数错误")
+
+	var appErr *xerr.AppError
+	if !errors.As(err, &appErr) {
+		t.Fatal("error should support errors.As AppError")
+	}
+	if appErr.Location == nil {
+		t.Fatal("Location = nil")
+	}
+	if !strings.HasSuffix(appErr.Location.File, "internal/xerr/xerr_test.go") {
+		t.Fatalf("Location.File = %q, want xerr_test.go caller", appErr.Location.File)
+	}
+	if strings.HasSuffix(appErr.Location.File, "internal/xerr/xerr.go") {
+		t.Fatalf("Location.File points to xerr internals: %q", appErr.Location.File)
+	}
+	if appErr.Location.Line == 0 {
+		t.Fatalf("Location.Line = 0")
+	}
+	if !strings.Contains(appErr.Location.Func, "TestAppErrorCapturesCallLocation") {
+		t.Fatalf("Location.Func = %q, want test caller", appErr.Location.Func)
+	}
+}
+
+func TestWrapfPreservesCauseAndCapturesLocation(t *testing.T) {
+	cause := errors.New("boom")
+
+	err := xerr.Wrapf(cause, "包装失败: %s", "case1")
+
+	if !errors.Is(err, cause) {
+		t.Fatal("Wrapf should preserve cause")
+	}
+	var appErr *xerr.AppError
+	if !errors.As(err, &appErr) {
+		t.Fatal("Wrapf should support errors.As AppError")
+	}
+	if appErr.Location == nil || !strings.Contains(appErr.Location.Func, "TestWrapfPreservesCauseAndCapturesLocation") {
+		t.Fatalf("Location = %#v, want Wrapf caller", appErr.Location)
 	}
 }

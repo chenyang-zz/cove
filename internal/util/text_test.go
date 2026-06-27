@@ -113,6 +113,26 @@ func TestNormalizeOptional(t *testing.T) {
 	}
 }
 
+func TestAssignIfNotEmpty(t *testing.T) {
+	dst := "old"
+	util.AssignIfNotEmpty(&dst, nil)
+	if dst != "old" {
+		t.Fatalf("AssignIfNotEmpty nil src changed dst to %q", dst)
+	}
+
+	empty := ""
+	util.AssignIfNotEmpty(&dst, &empty)
+	if dst != "old" {
+		t.Fatalf("AssignIfNotEmpty empty src changed dst to %q", dst)
+	}
+
+	next := "new"
+	util.AssignIfNotEmpty(&dst, &next)
+	if dst != "new" {
+		t.Fatalf("AssignIfNotEmpty dst = %q, want new", dst)
+	}
+}
+
 func ptr(value string) *string {
 	return &value
 }

@@ -98,6 +98,9 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMidd
 	if routes[0].HandlerType != "BookHandler" || routes[0].HandlerMethod != "Update" {
 		t.Fatalf("route = %+v, want BookHandler.Update", routes[0])
 	}
+	if routes[0].Path != "/:id" {
+		t.Fatalf("route path = %q, want /:id", routes[0].Path)
+	}
 }
 
 func TestGenerateCreatesMissingHandlerAndLogic(t *testing.T) {
@@ -190,6 +193,330 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMidd
 	}
 }
 
+func TestGenerateUsesURIAndQueryBindingForGETInputWithURIParam(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "internal/transport/http/routes/book.go", `package routes
+
+import (
+	"github.com/boxify/api-go/internal/transport/http/handler"
+	"github.com/gin-gonic/gin"
+)
+
+func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMiddleware gin.HandlerFunc) {
+	bookRoutes := api.Group("/books", authMiddleware)
+	// routegen: auth user_id input=request.ListBookChaptersRequest output=response.ListBookChaptersResponse
+	bookRoutes.GET("/:id/chapters", book.ListChapters)
+}
+`)
+
+	if _, err := Generate(root); err != nil {
+		t.Fatalf("Generate error = %v", err)
+	}
+
+	handlerFile := readFile(t, root, "internal/transport/http/handler/book.go")
+	for _, want := range []string{
+		"var query request.ListBookChaptersRequest",
+		"c.ShouldBindUri(&query)",
+		"c.ShouldBindQuery(&query)",
+		"booklogic.NewListChaptersLogic(c.Request.Context(), h.svc).ListChapters(userID, &query)",
+	} {
+		if !strings.Contains(handlerFile, want) {
+			t.Fatalf("handler file missing %q:\n%s", want, handlerFile)
+		}
+	}
+	if strings.Index(handlerFile, "ShouldBindUri(&query)") > strings.Index(handlerFile, "ShouldBindQuery(&query)") {
+		t.Fatalf("URI binding should be generated before query binding:\n%s", handlerFile)
+	}
+}
+
+func TestGenerateUsesURIAndJSONBindingForNonGETInputWithURIParam(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "internal/transport/http/request/book.go", `package request
+
+type UriOnlyRequest struct {
+	ID string `+"`uri:\"id\" binding:\"required\"`"+`
+}
+
+type UpdateBookRequest struct {
+	UriOnlyRequest
+	Title string `+"`json:\"title\" binding:\"required\"`"+`
+}
+`)
+	writeFile(t, root, "internal/transport/http/routes/book.go", `package routes
+
+import (
+	"github.com/boxify/api-go/internal/transport/http/handler"
+	"github.com/gin-gonic/gin"
+)
+
+func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMiddleware gin.HandlerFunc) {
+	bookRoutes := api.Group("/books", authMiddleware)
+	// routegen: auth user_id input=request.UpdateBookRequest output=response.BookResponse
+	bookRoutes.PUT("/:id", book.Update)
+}
+`)
+
+	if _, err := Generate(root); err != nil {
+		t.Fatalf("Generate error = %v", err)
+	}
+
+	handlerFile := readFile(t, root, "internal/transport/http/handler/book.go")
+	for _, want := range []string{
+		"var body request.UpdateBookRequest",
+		"c.ShouldBindUri(&body)",
+		"c.ShouldBindJSON(&body)",
+		"booklogic.NewUpdateLogic(c.Request.Context(), h.svc).Update(userID, &body)",
+	} {
+		if !strings.Contains(handlerFile, want) {
+			t.Fatalf("handler file missing %q:\n%s", want, handlerFile)
+		}
+	}
+	if strings.Index(handlerFile, "ShouldBindUri(&body)") > strings.Index(handlerFile, "ShouldBindJSON(&body)") {
+		t.Fatalf("URI binding should be generated before JSON binding:\n%s", handlerFile)
+	}
+}
+
+func TestGenerateSkipsJSONBindingForURIOnlyDELETEInput(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "internal/transport/http/request/book.go", `package request
+
+type UriOnlyRequest struct {
+	ID string `+"`uri:\"id\" binding:\"required\"`"+`
+}
+`)
+	writeFile(t, root, "internal/transport/http/routes/book.go", `package routes
+
+import (
+	"github.com/boxify/api-go/internal/transport/http/handler"
+	"github.com/gin-gonic/gin"
+)
+
+func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMiddleware gin.HandlerFunc) {
+	bookRoutes := api.Group("/books", authMiddleware)
+	// routegen: auth user_id input=request.UriOnlyRequest
+	bookRoutes.DELETE("/:id", book.Delete)
+}
+`)
+
+	if _, err := Generate(root); err != nil {
+		t.Fatalf("Generate error = %v", err)
+	}
+
+	handlerFile := readFile(t, root, "internal/transport/http/handler/book.go")
+	for _, want := range []string{
+		"var body request.UriOnlyRequest",
+		"c.ShouldBindUri(&body)",
+		"booklogic.NewDeleteLogic(c.Request.Context(), h.svc).Delete(userID, &body)",
+	} {
+		if !strings.Contains(handlerFile, want) {
+			t.Fatalf("handler file missing %q:\n%s", want, handlerFile)
+		}
+	}
+	if strings.Contains(handlerFile, "ShouldBindJSON") {
+		t.Fatalf("URI-only input should not bind JSON:\n%s", handlerFile)
+	}
+}
+
+func TestGenerateSkipsJSONBindingForURIOnlyPOSTInput(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "internal/transport/http/request/book.go", `package request
+
+type UriOnlyRequest struct {
+	ID string `+"`uri:\"id\" binding:\"required\"`"+`
+}
+`)
+	writeFile(t, root, "internal/transport/http/routes/book.go", `package routes
+
+import (
+	"github.com/boxify/api-go/internal/transport/http/handler"
+	"github.com/gin-gonic/gin"
+)
+
+func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMiddleware gin.HandlerFunc) {
+	bookRoutes := api.Group("/books", authMiddleware)
+	// routegen: auth user_id input=request.UriOnlyRequest output=response.BookResponse
+	bookRoutes.POST("/:id/default", book.SetDefault)
+}
+`)
+
+	if _, err := Generate(root); err != nil {
+		t.Fatalf("Generate error = %v", err)
+	}
+
+	handlerFile := readFile(t, root, "internal/transport/http/handler/book.go")
+	for _, want := range []string{
+		"var body request.UriOnlyRequest",
+		"c.ShouldBindUri(&body)",
+		"booklogic.NewSetDefaultLogic(c.Request.Context(), h.svc).SetDefault(userID, &body)",
+	} {
+		if !strings.Contains(handlerFile, want) {
+			t.Fatalf("handler file missing %q:\n%s", want, handlerFile)
+		}
+	}
+	if strings.Contains(handlerFile, "ShouldBindJSON") {
+		t.Fatalf("URI-only input should not bind JSON:\n%s", handlerFile)
+	}
+}
+
+func TestGenerateUsesMultipartBindingForUploadInput(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "internal/transport/http/request/book.go", `package request
+
+import "mime/multipart"
+
+type UploadBookRequest struct {
+	File *multipart.FileHeader `+"`form:\"file\" binding:\"required\"`"+`
+	Title string `+"`form:\"title\" binding:\"required\"`"+`
+}
+`)
+	writeFile(t, root, "internal/transport/http/routes/book.go", `package routes
+
+import (
+	"github.com/boxify/api-go/internal/transport/http/handler"
+	"github.com/gin-gonic/gin"
+)
+
+func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMiddleware gin.HandlerFunc) {
+	bookRoutes := api.Group("/books", authMiddleware)
+	// routegen: auth user_id input=request.UploadBookRequest output=response.BookResponse
+	bookRoutes.POST("/upload", book.Upload)
+}
+`)
+
+	if _, err := Generate(root); err != nil {
+		t.Fatalf("Generate error = %v", err)
+	}
+
+	handlerFile := readFile(t, root, "internal/transport/http/handler/book.go")
+	for _, want := range []string{
+		"var body request.UploadBookRequest",
+		"c.ShouldBind(&body)",
+		"booklogic.NewUploadLogic(c.Request.Context(), h.svc).Upload(userID, &body)",
+	} {
+		if !strings.Contains(handlerFile, want) {
+			t.Fatalf("handler file missing %q:\n%s", want, handlerFile)
+		}
+	}
+	if strings.Contains(handlerFile, "ShouldBindJSON") {
+		t.Fatalf("multipart input should not bind JSON:\n%s", handlerFile)
+	}
+}
+
+func TestGenerateUsesURIAndMultipartBindingForUploadInput(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "internal/transport/http/request/book.go", `package request
+
+import "mime/multipart"
+
+type UriOnlyRequest struct {
+	ID string `+"`uri:\"id\" binding:\"required\"`"+`
+}
+
+type UploadBookCoverRequest struct {
+	UriOnlyRequest
+	Cover multipart.FileHeader `+"`form:\"cover\" binding:\"required\"`"+`
+}
+`)
+	writeFile(t, root, "internal/transport/http/routes/book.go", `package routes
+
+import (
+	"github.com/boxify/api-go/internal/transport/http/handler"
+	"github.com/gin-gonic/gin"
+)
+
+func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMiddleware gin.HandlerFunc) {
+	bookRoutes := api.Group("/books", authMiddleware)
+	// routegen: auth user_id input=request.UploadBookCoverRequest output=response.BookResponse
+	bookRoutes.POST("/:id/cover", book.UploadCover)
+}
+`)
+
+	if _, err := Generate(root); err != nil {
+		t.Fatalf("Generate error = %v", err)
+	}
+
+	handlerFile := readFile(t, root, "internal/transport/http/handler/book.go")
+	for _, want := range []string{
+		"var body request.UploadBookCoverRequest",
+		"c.ShouldBindUri(&body)",
+		"c.ShouldBind(&body)",
+		"booklogic.NewUploadCoverLogic(c.Request.Context(), h.svc).UploadCover(userID, &body)",
+	} {
+		if !strings.Contains(handlerFile, want) {
+			t.Fatalf("handler file missing %q:\n%s", want, handlerFile)
+		}
+	}
+	if strings.Index(handlerFile, "ShouldBindUri(&body)") > strings.Index(handlerFile, "ShouldBind(&body)") {
+		t.Fatalf("URI binding should be generated before multipart binding:\n%s", handlerFile)
+	}
+	if strings.Contains(handlerFile, "ShouldBindJSON") {
+		t.Fatalf("multipart input should not bind JSON:\n%s", handlerFile)
+	}
+}
+
+func TestGenerateUsesMultipartBindingForMultiFileUploadInput(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "internal/transport/http/request/book.go", `package request
+
+import "mime/multipart"
+
+type UploadBookImagesRequest struct {
+	Images []*multipart.FileHeader `+"`form:\"images\" binding:\"required\"`"+`
+}
+`)
+	writeFile(t, root, "internal/transport/http/routes/book.go", `package routes
+
+import (
+	"github.com/boxify/api-go/internal/transport/http/handler"
+	"github.com/gin-gonic/gin"
+)
+
+func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMiddleware gin.HandlerFunc) {
+	bookRoutes := api.Group("/books", authMiddleware)
+	// routegen: auth user_id input=request.UploadBookImagesRequest output=response.BookResponse
+	bookRoutes.POST("/images", book.UploadImages)
+}
+`)
+
+	if _, err := Generate(root); err != nil {
+		t.Fatalf("Generate error = %v", err)
+	}
+
+	handlerFile := readFile(t, root, "internal/transport/http/handler/book.go")
+	if !strings.Contains(handlerFile, "c.ShouldBind(&body)") {
+		t.Fatalf("multipart input should bind multipart form:\n%s", handlerFile)
+	}
+	if strings.Contains(handlerFile, "ShouldBindJSON") {
+		t.Fatalf("multipart input should not bind JSON:\n%s", handlerFile)
+	}
+}
+
+func TestGenerateKeepsJSONBindingWhenRequestDTOCannotBeParsed(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "internal/transport/http/routes/book.go", `package routes
+
+import (
+	"github.com/boxify/api-go/internal/transport/http/handler"
+	"github.com/gin-gonic/gin"
+)
+
+func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMiddleware gin.HandlerFunc) {
+	bookRoutes := api.Group("/books", authMiddleware)
+	// routegen: auth user_id input=request.UnknownRequest output=response.BookResponse
+	bookRoutes.POST("/:id", book.Update)
+}
+`)
+
+	if _, err := Generate(root); err != nil {
+		t.Fatalf("Generate error = %v", err)
+	}
+
+	handlerFile := readFile(t, root, "internal/transport/http/handler/book.go")
+	if !strings.Contains(handlerFile, "c.ShouldBindJSON(&body)") {
+		t.Fatalf("unknown input should keep JSON binding fallback:\n%s", handlerFile)
+	}
+}
+
 func TestGenerateCreatesNoOutputLogicWithOnlyErrorReturn(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "internal/transport/http/routes/book.go", `package routes
@@ -221,6 +548,9 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMidd
 	}
 	if strings.Contains(handlerFile, "out, err :=") {
 		t.Fatalf("handler file should not declare output value:\n%s", handlerFile)
+	}
+	if strings.Contains(handlerFile, "ShouldBindUri") {
+		t.Fatalf("handler without input should not bind uri:\n%s", handlerFile)
 	}
 
 	logicFile := readFile(t, root, "internal/logic/book/delete.go")

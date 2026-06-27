@@ -56,6 +56,7 @@ func RecoveryMiddleware() gin.HandlerFunc {
 					"method", c.Request.Method,
 					"path", c.Request.URL.Path,
 				)
+				response.SuppressErrorLog(c)
 				response.FromError(c, err)
 				c.Abort()
 			}

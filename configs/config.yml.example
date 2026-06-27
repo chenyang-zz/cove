@@ -10,9 +10,15 @@ database:
 
 redis:
   addr: localhost:6379
+  username: ""
+  password: ""
+  db: 0
 
 elasticsearch:
   url: http://localhost:9200
+  username: ""
+  password: ""
+  api_key: ""
 
 neo4j:
   uri: bolt://124.222.103.82:7687
@@ -29,6 +35,11 @@ secret_key: 0123456789abcdef0123456789abcdef
 storage:
   backend: local
   dir: ./storage
+  cos:
+    bucket_url: ""
+    secret_id: ""
+    secret_key: ""
+    base_url: ""
 
 llm:
   provider: openai

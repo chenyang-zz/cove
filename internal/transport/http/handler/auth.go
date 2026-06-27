@@ -105,3 +105,22 @@ func (h AuthHandler) Password(c *gin.Context) {
 	}
 	response.OK(c, nil)
 }
+
+func (h AuthHandler) UpdateAvatar(c *gin.Context) {
+	var body request.FileRequest
+	if err := c.ShouldBind(&body); err != nil {
+		response.FromError(c, xerr.Validation(err))
+		return
+	}
+	userID, err := util.UserIDFromContext(c.Request.Context())
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	out, err := authlogic.NewUpdateAvatarLogic(c.Request.Context(), h.svc).UpdateAvatar(userID, &body)
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	response.OK(c, out)
+}

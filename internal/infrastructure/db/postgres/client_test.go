@@ -92,6 +92,26 @@ func TestTxRejectsNilFunction(t *testing.T) {
 	}
 }
 
+func TestPingRejectsUninitializedClient(t *testing.T) {
+	err := (&Client{}).Ping(context.Background())
+	if err == nil {
+		t.Fatal("Ping returned nil error")
+	}
+	if xerr.From(err).Kind != xerr.KindBadRequest {
+		t.Fatalf("error kind = %s, want %s", xerr.From(err).Kind, xerr.KindBadRequest)
+	}
+}
+
+func TestPingGormDBRejectsNilDB(t *testing.T) {
+	err := PingGormDB(context.Background(), nil)
+	if err == nil {
+		t.Fatal("PingGormDB returned nil error")
+	}
+	if xerr.From(err).Kind != xerr.KindBadRequest {
+		t.Fatalf("error kind = %s, want %s", xerr.From(err).Kind, xerr.KindBadRequest)
+	}
+}
+
 func TestClientIntegrationWhenPostgresEnvIsConfigured(t *testing.T) {
 	url := os.Getenv("POSTGRES_TEST_URL")
 	if url == "" {
@@ -110,6 +130,9 @@ func TestClientIntegrationWhenPostgresEnvIsConfigured(t *testing.T) {
 	}
 	if err := client.Verify(ctx); err != nil {
 		t.Fatalf("Verify error = %v", err)
+	}
+	if err := client.Ping(ctx); err != nil {
+		t.Fatalf("Ping error = %v", err)
 	}
 
 	table := "codex_postgres_client_test"
@@ -153,6 +176,28 @@ func TestClientIntegrationWhenPostgresEnvIsConfigured(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatalf("rollback row count = %d, want 0", count)
+	}
+}
+
+func TestGormIntegrationWhenPostgresEnvIsConfigured(t *testing.T) {
+	url := os.Getenv("POSTGRES_TEST_URL")
+	if url == "" {
+		t.Skip("POSTGRES_TEST_URL is required")
+	}
+
+	ctx := context.Background()
+	db, err := NewGormDB(ctx, Config{URL: url})
+	if err != nil {
+		t.Fatalf("NewGormDB error = %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("db.DB error = %v", err)
+	}
+	defer sqlDB.Close()
+
+	if err := PingGormDB(ctx, db); err != nil {
+		t.Fatalf("PingGormDB error = %v", err)
 	}
 }
 

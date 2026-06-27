@@ -9,6 +9,9 @@ import (
 )
 
 type ModelConfigRepository interface {
-	Create(ctx context.Context, row *models.ModelConfig) (*models.ModelConfig, error)
+	Create(ctx context.Context, modelConfig *models.ModelConfig) (*models.ModelConfig, error)
+	Update(ctx context.Context, modelConfig *models.ModelConfig) (*models.ModelConfig, error)
+	Delete(ctx context.Context, ID uuid.UUID) error
 	List(ctx context.Context, userID uuid.UUID, modelType *domain.ModelType) ([]*models.ModelConfig, error)
+	FindByID(ctx context.Context, userID uuid.UUID, configID uuid.UUID) (*models.ModelConfig, error)
 }

@@ -17,6 +17,7 @@ type ModelResponse struct {
 	Capability   []string  `json:"capability"`
 	IsDefault    bool      `json:"is_default"`
 	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at,omitempty"`
 }
 
 type ListModelsResponse struct {

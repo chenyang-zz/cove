@@ -30,7 +30,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 		response.FromError(c, xerr.NotFound("route not found"))
 	})
 
-	health := handler.HealthHandler{}
+	health := handler.NewHealthHandler(deps.Svc)
 	auth := handler.NewAuthHandler(deps.Svc)
 	chat := handler.NewChatHandler(deps.Svc)
 	modelConfig := handler.NewModelConfigHandler(deps.Svc)

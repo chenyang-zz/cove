@@ -43,6 +43,13 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 }
 
 func (c *Client) Verify(ctx context.Context) error {
+	return c.Ping(ctx)
+}
+
+func (c *Client) Ping(ctx context.Context) error {
+	if c == nil || c.driver == nil {
+		return xerr.BadRequest("Neo4j 客户端未初始化")
+	}
 	if err := c.driver.VerifyConnectivity(ctx); err != nil {
 		return xerr.Wrapf(err, "验证 Neo4j 连接失败")
 	}

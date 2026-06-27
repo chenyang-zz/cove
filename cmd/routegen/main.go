@@ -12,7 +12,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -76,11 +78,29 @@ type Directive struct {
 
 type Route struct {
 	HTTPMethod    string
+	Path          string
 	HandlerVar    string
 	HandlerType   string
 	HandlerMethod string
 	Domain        string
 	Directive     Directive
+}
+
+type RequestDTO struct {
+	HasJSONBody      bool
+	HasMultipartBody bool
+}
+
+type requestStruct struct {
+	Fields []requestField
+}
+
+type requestField struct {
+	JSONTag          string
+	URITag           string
+	FormTag          string
+	EmbeddedType     string
+	HasMultipartFile bool
 }
 
 func main() {
@@ -114,6 +134,10 @@ func Generate(root string) (Report, error) {
 	if err != nil {
 		return report, err
 	}
+	requestDTOs, err := scanRequestDTOs(root)
+	if err != nil {
+		return report, err
+	}
 
 	routesByDomain := map[string][]Route{}
 	for _, route := range routes {
@@ -126,7 +150,7 @@ func Generate(root string) (Report, error) {
 	sort.Strings(domains)
 
 	for _, domain := range domains {
-		if err := generateHandler(root, domain, routesByDomain[domain], handlers, &report); err != nil {
+		if err := generateHandler(root, domain, routesByDomain[domain], handlers, requestDTOs, &report); err != nil {
 			return report, err
 		}
 		for _, route := range routesByDomain[domain] {
@@ -246,6 +270,7 @@ func scanRouteFile(path string) ([]Route, error) {
 			}
 			routes = append(routes, Route{
 				HTTPMethod:    method,
+				Path:          routePathFromCall(call),
 				HandlerVar:    handlerIdent.Name,
 				HandlerType:   handlerType,
 				HandlerMethod: handlerSelector.Sel.Name,
@@ -256,6 +281,21 @@ func scanRouteFile(path string) ([]Route, error) {
 		})
 	}
 	return routes, nil
+}
+
+func routePathFromCall(call *ast.CallExpr) string {
+	if len(call.Args) == 0 {
+		return ""
+	}
+	lit, ok := call.Args[0].(*ast.BasicLit)
+	if !ok || lit.Kind != token.STRING {
+		return ""
+	}
+	value, err := strconv.Unquote(lit.Value)
+	if err != nil {
+		return ""
+	}
+	return value
 }
 
 func handlerFromRouteArgs(args []ast.Expr, handlerTypes map[string]string) (*ast.SelectorExpr, *ast.Ident, bool) {
@@ -378,6 +418,154 @@ func scanLogics(root string) (map[string]string, error) {
 	})
 }
 
+func scanRequestDTOs(root string) (map[string]RequestDTO, error) {
+	requestDir := filepath.Join(root, "internal", "transport", "http", "request")
+	structs := map[string]requestStruct{}
+	if err := scanGoFiles(requestDir, func(path string, file *ast.File) {
+		for _, decl := range file.Decls {
+			genDecl, ok := decl.(*ast.GenDecl)
+			if !ok {
+				continue
+			}
+			for _, spec := range genDecl.Specs {
+				typeSpec, ok := spec.(*ast.TypeSpec)
+				if !ok {
+					continue
+				}
+				structType, ok := typeSpec.Type.(*ast.StructType)
+				if !ok {
+					continue
+				}
+				structs[typeSpec.Name.Name] = requestStruct{Fields: requestFields(structType)}
+			}
+		}
+	}); err != nil {
+		return nil, err
+	}
+
+	out := map[string]RequestDTO{}
+	for name := range structs {
+		out[name] = RequestDTO{
+			HasJSONBody:      requestStructHasJSONBody(name, structs, map[string]bool{}),
+			HasMultipartBody: requestStructHasMultipartBody(name, structs, map[string]bool{}),
+		}
+	}
+	return out, nil
+}
+
+func requestFields(structType *ast.StructType) []requestField {
+	if structType == nil || structType.Fields == nil {
+		return nil
+	}
+	fields := make([]requestField, 0, len(structType.Fields.List))
+	for _, field := range structType.Fields.List {
+		item := requestField{}
+		if field.Tag != nil {
+			item.JSONTag = tagValue(field.Tag.Value, "json")
+			item.URITag = tagValue(field.Tag.Value, "uri")
+			item.FormTag = tagValue(field.Tag.Value, "form")
+		}
+		if len(field.Names) == 0 {
+			item.EmbeddedType = requestEmbeddedTypeName(field.Type)
+		}
+		item.HasMultipartFile = tagName(item.FormTag) != "" && requestExprIsMultipartFileHeader(field.Type)
+		fields = append(fields, item)
+	}
+	return fields
+}
+
+func requestStructHasJSONBody(name string, structs map[string]requestStruct, visiting map[string]bool) bool {
+	if visiting[name] {
+		return false
+	}
+	info, ok := structs[name]
+	if !ok {
+		return false
+	}
+	visiting[name] = true
+	defer delete(visiting, name)
+
+	for _, field := range info.Fields {
+		if tagName(field.JSONTag) != "" && tagName(field.URITag) == "" {
+			return true
+		}
+		if field.EmbeddedType != "" && requestStructHasJSONBody(field.EmbeddedType, structs, visiting) {
+			return true
+		}
+	}
+	return false
+}
+
+func requestStructHasMultipartBody(name string, structs map[string]requestStruct, visiting map[string]bool) bool {
+	if visiting[name] {
+		return false
+	}
+	info, ok := structs[name]
+	if !ok {
+		return false
+	}
+	visiting[name] = true
+	defer delete(visiting, name)
+
+	for _, field := range info.Fields {
+		if field.HasMultipartFile {
+			return true
+		}
+		if field.EmbeddedType != "" && requestStructHasMultipartBody(field.EmbeddedType, structs, visiting) {
+			return true
+		}
+	}
+	return false
+}
+
+func requestEmbeddedTypeName(expr ast.Expr) string {
+	switch item := expr.(type) {
+	case *ast.Ident:
+		return item.Name
+	case *ast.StarExpr:
+		return requestEmbeddedTypeName(item.X)
+	case *ast.SelectorExpr:
+		return item.Sel.Name
+	default:
+		return ""
+	}
+}
+
+func requestExprIsMultipartFileHeader(expr ast.Expr) bool {
+	switch item := expr.(type) {
+	case *ast.SelectorExpr:
+		return item.Sel.Name == "FileHeader"
+	case *ast.StarExpr:
+		return requestExprIsMultipartFileHeader(item.X)
+	case *ast.ArrayType:
+		return requestExprIsMultipartFileHeader(item.Elt)
+	default:
+		return false
+	}
+}
+
+func tagValue(raw string, key string) string {
+	if raw == "" {
+		return ""
+	}
+	unquoted, err := strconv.Unquote(raw)
+	if err != nil {
+		return ""
+	}
+	return reflect.StructTag(unquoted).Get(key)
+}
+
+func tagName(tag string) string {
+	if tag == "" {
+		return ""
+	}
+	name := strings.Split(tag, ",")[0]
+	if name == "-" {
+		return ""
+	}
+	return name
+}
+
 func scanGoFiles(dir string, visit func(string, *ast.File)) error {
 	if _, err := os.Stat(dir); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -417,7 +605,7 @@ func receiverTypeName(fields *ast.FieldList) string {
 	return ""
 }
 
-func generateHandler(root, domain string, routes []Route, existing map[string]string, report *Report) error {
+func generateHandler(root, domain string, routes []Route, existing map[string]string, requestDTOs map[string]RequestDTO, report *Report) error {
 	if len(routes) == 0 {
 		return nil
 	}
@@ -443,7 +631,7 @@ func New%[1]s(svcCtx *svc.ServiceContext) %[1]s {
 			report.Add(FileSkipped, path)
 			continue
 		}
-		snippets = append(snippets, handlerMethodSnippet(route))
+		snippets = append(snippets, handlerMethodSnippet(route, requestDTOs))
 		existing[key] = handlerPath(root, domain)
 	}
 	if len(snippets) == 0 {
@@ -500,16 +688,27 @@ func handlerImports(domain string, routes []Route, includeSvc bool) []string {
 	return imports
 }
 
-func handlerMethodSnippet(route Route) string {
+func handlerMethodSnippet(route Route, requestDTOs map[string]RequestDTO) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "func (h %s) %s(c *gin.Context) {\n", route.HandlerType, route.HandlerMethod)
 	if route.Directive.Input != "" {
 		inputVar, bindMethod := handlerInputBinding(route)
 		fmt.Fprintf(&b, "\tvar %s %s\n", inputVar, route.Directive.Input)
-		fmt.Fprintf(&b, "\tif err := c.%s(&%s); err != nil {\n", bindMethod, inputVar)
-		b.WriteString("\t\tresponse.FromError(c, xerr.Validation(err))\n")
-		b.WriteString("\t\treturn\n")
-		b.WriteString("\t}\n")
+		if routeHasURIParam(route) {
+			fmt.Fprintf(&b, "\tif err := c.ShouldBindUri(&%s); err != nil {\n", inputVar)
+			b.WriteString("\t\tresponse.FromError(c, xerr.Validation(err))\n")
+			b.WriteString("\t\treturn\n")
+			b.WriteString("\t}\n")
+		}
+		if route.HTTPMethod != "GET" && routeShouldBindMultipart(route, requestDTOs) {
+			bindMethod = "ShouldBind"
+		}
+		if route.HTTPMethod == "GET" || routeShouldBindMultipart(route, requestDTOs) || routeShouldBindJSON(route, requestDTOs) {
+			fmt.Fprintf(&b, "\tif err := c.%s(&%s); err != nil {\n", bindMethod, inputVar)
+			b.WriteString("\t\tresponse.FromError(c, xerr.Validation(err))\n")
+			b.WriteString("\t\treturn\n")
+			b.WriteString("\t}\n")
+		}
 	}
 	if route.Directive.UserID {
 		b.WriteString("\tuserID, err := util.UserIDFromContext(c.Request.Context())\n")
@@ -554,6 +753,52 @@ func handlerInputBinding(route Route) (inputVar string, bindMethod string) {
 		return "query", "ShouldBindQuery"
 	}
 	return "body", "ShouldBindJSON"
+}
+
+func routeShouldBindJSON(route Route, requestDTOs map[string]RequestDTO) bool {
+	if route.HTTPMethod == "GET" || route.Directive.Input == "" {
+		return false
+	}
+	typeName := requestTypeName(route.Directive.Input)
+	dto, ok := requestDTOs[typeName]
+	if !ok {
+		return true
+	}
+	return !dto.HasMultipartBody && dto.HasJSONBody
+}
+
+func routeShouldBindMultipart(route Route, requestDTOs map[string]RequestDTO) bool {
+	if route.HTTPMethod == "GET" || route.Directive.Input == "" {
+		return false
+	}
+	typeName := requestTypeName(route.Directive.Input)
+	dto, ok := requestDTOs[typeName]
+	if !ok {
+		return false
+	}
+	return dto.HasMultipartBody
+}
+
+func requestTypeName(input string) string {
+	input = strings.TrimSpace(input)
+	input = strings.TrimPrefix(input, "*")
+	if idx := strings.LastIndex(input, "."); idx >= 0 {
+		return input[idx+1:]
+	}
+	return input
+}
+
+func routeHasURIParam(route Route) bool {
+	return pathHasURIParam(route.Path)
+}
+
+func pathHasURIParam(path string) bool {
+	for _, segment := range strings.Split(path, "/") {
+		if strings.HasPrefix(segment, ":") && len(segment) > 1 {
+			return true
+		}
+	}
+	return false
 }
 
 func handlerCallArgs(route Route) []string {
