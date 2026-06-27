@@ -1,0 +1,51 @@
+cmd/routegen/file.go
+  s_68c6fb60822163::t_751a7316e20ada 1-4,6-276
+  s_68c6fb60822163::t_8613393c9540c2 5
+cmd/routegen/generate_logic.go
+  s_68c6fb60822163::t_751a7316e20ada 1-151
+cmd/routegen/scan_existing.go
+  s_68c6fb60822163::t_751a7316e20ada 1-107
+cmd/routegen/types.go
+  s_68c6fb60822163::t_751a7316e20ada 1-91
+internal/transport/http/routes/conversation.go
+  h_e1f1392360ad67 20-22
+internal/transport/http/request/conversation.go
+  h_e1f1392360ad67 12-15
+cmd/routegen/main_test.go
+  s_68c6fb60822163::t_db5fa9115ed2a8 38-67,151-184,195-201,203-204,292
+  s_68c6fb60822163::t_1941bb429570c5 137-150,185-194,202,205-207,250,252,254,266-291,293-299,330-358,978
+  s_68c6fb60822163::t_0755138e25c7ed 325
+  s_68c6fb60822163::t_75e9dd4b122db3 300-324,326-329
+  s_68c6fb60822163::t_323aef5a763b6a 5,971-977
+  s_68c6fb60822163::t_3884016a8535f9 359
+cmd/routegen/generate_handler.go
+  s_68c6fb60822163::t_751a7316e20ada 1-218
+cmd/routegen/directive.go
+  s_68c6fb60822163::t_751a7316e20ada 1-145
+cmd/routegen/scan_request.go
+  s_68c6fb60822163::t_751a7316e20ada 1-4,6-157
+  s_68c6fb60822163::t_8613393c9540c2 5
+cmd/routegen/scan_routes.go
+  s_68c6fb60822163::t_751a7316e20ada 1-162
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "303e3447afeda776e0103581c49c8f74da03ef00",
+  "prompts": {},
+  "humans": {
+    "h_e1f1392360ad67": {
+      "author": "chenyang <904852749@qq.com>"
+    }
+  },
+  "sessions": {
+    "s_68c6fb60822163": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eef3b-556e-7b21-8e7d-a378edabe8e9",
+        "model": "gpt-5.5"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
