@@ -1,0 +1,38 @@
+cmd/codegen/generate_repository.go
+  s_68c6fb60822163::t_f2e5158bbead98 229,298,302,311-312,342-345,348
+  s_68c6fb60822163::t_2cad215368ee0b 31-33,43,121,130,149,159,171,185,204,218,228,230-235
+  s_68c6fb60822163::t_5cb73af20fcf49 249-297,299-301,303-310,313-341,346-347,349-350
+cmd/codegen/main_test.go
+  s_68c6fb60822163::t_76ae3aced63238 1342,1347-1407,1409-1422
+  s_68c6fb60822163::t_4920dcfd830b1b 1408
+  s_68c6fb60822163::t_3e5337f0c4f383 1423
+internal/models/message.go
+  h_e1f1392360ad67 8-31
+cmd/codegen/types.go
+  s_68c6fb60822163::t_34a105dc678acd 102-110
+Makefile
+  s_68c6fb60822163::t_34a105dc678acd 14
+cmd/codegen/main.go
+  s_68c6fb60822163::t_34a105dc678acd 53,63,75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "4b99a412c80100aaf67db877ac870905049b4819",
+  "prompts": {},
+  "humans": {
+    "h_e1f1392360ad67": {
+      "author": "chenyang <904852749@qq.com>"
+    }
+  },
+  "sessions": {
+    "s_68c6fb60822163": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eef3b-556e-7b21-8e7d-a378edabe8e9",
+        "model": "gpt-5.5"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
