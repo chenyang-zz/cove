@@ -73,30 +73,8 @@ func New(ctx context.Context, cfg config.Config) (*ServiceContext, error) {
 		return nil, err
 	}
 
-	userRepo := repositorypostgres.NewUserRepository(db)
-	refreshTokenRepo := repositorypostgres.NewRefreshTokenRepository(db)
-	modelConfigRepo := repositorypostgres.NewModelConfigRepository(db)
-	conversationRepo := repositorypostgres.NewConversationRepository(db)
-	messageRepo := repositorypostgres.NewMessageRepository(db)
-	messageFeedbackRepo := repositorypostgres.NewMessageFeedbackRepository(db)
-	agentConfigRepo := repositorypostgres.NewAgentConfigRepository(db)
-	agentPersonaRepo := repositorypostgres.NewAgentPersonaRepository(db)
-	agentTaskRepo := repositorypostgres.NewAgentTaskRepository(db)
-
 	svcCtx := &ServiceContext{
 		Config: cfg,
-
-		GormDB: db,
-
-		UserRepo:            userRepo,
-		RefreshTokenRepo:    refreshTokenRepo,
-		ModelConfigRepo:     modelConfigRepo,
-		ConversationRepo:    conversationRepo,
-		MessageRepo:         messageRepo,
-		MessageFeedbackRepo: messageFeedbackRepo,
-		AgentConfigRepo:     agentConfigRepo,
-		AgentPersonaRepo:    agentPersonaRepo,
-		AgentTaskRepo:       agentTaskRepo,
 
 		SecretCipher: cipher,
 		TokenIssuer:  security.NewTokenIssuer(cfg.JWT.Secret, accessTokenTTL),
@@ -104,6 +82,7 @@ func New(ctx context.Context, cfg config.Config) (*ServiceContext, error) {
 		PromptManager: prompt.NewManager(filepath.Join("internal", "prompts")),
 		LLMManager:    BuildLLMManager(),
 	}
+	bindPostgresRepositories(svcCtx, db)
 
 	redisClient, err := infraredis.NewClient(ctx, infraredis.Config{
 		Addr:     cfg.Redis.Addr,
@@ -154,6 +133,30 @@ func New(ctx context.Context, cfg config.Config) (*ServiceContext, error) {
 	}
 
 	return svcCtx, nil
+}
+
+func bindPostgresRepositories(s *ServiceContext, db *gorm.DB) {
+	s.GormDB = db
+	s.UserRepo = repositorypostgres.NewUserRepository(db)
+	s.RefreshTokenRepo = repositorypostgres.NewRefreshTokenRepository(db)
+	s.ModelConfigRepo = repositorypostgres.NewModelConfigRepository(db)
+	s.ConversationRepo = repositorypostgres.NewConversationRepository(db)
+	s.MessageRepo = repositorypostgres.NewMessageRepository(db)
+	s.MessageFeedbackRepo = repositorypostgres.NewMessageFeedbackRepository(db)
+	s.AgentConfigRepo = repositorypostgres.NewAgentConfigRepository(db)
+	s.AgentPersonaRepo = repositorypostgres.NewAgentPersonaRepository(db)
+	s.AgentTaskRepo = repositorypostgres.NewAgentTaskRepository(db)
+}
+
+func (s *ServiceContext) WithTx(ctx context.Context, fn func(txSvc *ServiceContext) error) error {
+	if s == nil || s.GormDB == nil {
+		return xerr.Internal("数据库未初始化", nil)
+	}
+	return s.GormDB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		txSvc := *s
+		bindPostgresRepositories(&txSvc, tx)
+		return fn(&txSvc)
+	})
 }
 
 func (s *ServiceContext) Close(ctx context.Context) error {

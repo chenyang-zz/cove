@@ -3,13 +3,21 @@ package svc_test
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/boxify/api-go/internal/config"
+	"github.com/boxify/api-go/internal/infrastructure/db/migration"
+	dbpostgres "github.com/boxify/api-go/internal/infrastructure/db/postgres"
 	infraredis "github.com/boxify/api-go/internal/infrastructure/db/redis"
 	"github.com/boxify/api-go/internal/infrastructure/storage"
+	"github.com/boxify/api-go/internal/models"
+	repositorypostgres "github.com/boxify/api-go/internal/repository/postgres"
 	"github.com/boxify/api-go/internal/svc"
+	"github.com/boxify/api-go/internal/xerr"
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 func TestNewReturnsErrorForInvalidPostgresURL(t *testing.T) {
@@ -97,6 +105,79 @@ func TestBuildRealtimeReturnsRedisBrokerForRedisClient(t *testing.T) {
 	}
 }
 
+func TestWithTxRequiresGormDB(t *testing.T) {
+	ctx := context.Background()
+
+	var nilSvc *svc.ServiceContext
+	if err := nilSvc.WithTx(ctx, func(*svc.ServiceContext) error { return nil }); xerr.From(err).Kind != xerr.KindInternal {
+		t.Fatalf("nil ServiceContext WithTx error = %v, want internal", err)
+	}
+
+	if err := (&svc.ServiceContext{}).WithTx(ctx, func(*svc.ServiceContext) error { return nil }); xerr.From(err).Kind != xerr.KindInternal {
+		t.Fatalf("nil GormDB WithTx error = %v, want internal", err)
+	}
+}
+
+func TestWithTxRollsBackAndCommitsWhenPostgresEnvIsConfigured(t *testing.T) {
+	db := newSvcTxTestDB(t)
+	ctx := context.Background()
+	svcCtx := &svc.ServiceContext{GormDB: db}
+	userRepo := repositorypostgres.NewUserRepository(db)
+
+	rollbackUsername := "tx-rollback-" + uuid.NewString()
+	rollbackErr := errors.New("rollback")
+	err := svcCtx.WithTx(ctx, func(txSvc *svc.ServiceContext) error {
+		if txSvc.GormDB == nil || txSvc.UserRepo == nil || txSvc.ConversationRepo == nil {
+			return errors.New("transaction repositories were not rebound")
+		}
+		user, err := txSvc.UserRepo.Create(ctx, &models.User{
+			Username:     rollbackUsername,
+			PasswordHash: "hash",
+		})
+		if err != nil {
+			return err
+		}
+		if _, err := txSvc.ConversationRepo.Create(ctx, user.ID, &models.Conversation{Title: "rollback"}); err != nil {
+			return err
+		}
+		return rollbackErr
+	})
+	if !errors.Is(err, rollbackErr) {
+		t.Fatalf("WithTx rollback error = %v, want %v", err, rollbackErr)
+	}
+	if _, err := userRepo.FindByLogin(ctx, rollbackUsername); xerr.From(err).Kind != xerr.KindNotFound {
+		t.Fatalf("FindByLogin after rollback error = %v, want not found", err)
+	}
+
+	commitUsername := "tx-commit-" + uuid.NewString()
+	var committedUserID uuid.UUID
+	err = svcCtx.WithTx(ctx, func(txSvc *svc.ServiceContext) error {
+		if txSvc.GormDB == nil || txSvc.UserRepo == nil || txSvc.ConversationRepo == nil {
+			return errors.New("transaction repositories were not rebound")
+		}
+		user, err := txSvc.UserRepo.Create(ctx, &models.User{
+			Username:     commitUsername,
+			PasswordHash: "hash",
+		})
+		if err != nil {
+			return err
+		}
+		committedUserID = user.ID
+		_, err = txSvc.ConversationRepo.Create(ctx, user.ID, &models.Conversation{Title: "commit"})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("WithTx commit error = %v", err)
+	}
+	t.Cleanup(func() {
+		db.WithContext(context.Background()).Exec("DELETE FROM conversations WHERE user_id = ?", committedUserID)
+		db.WithContext(context.Background()).Exec("DELETE FROM users WHERE id = ?", committedUserID)
+	})
+	if _, err := userRepo.FindByLogin(ctx, commitUsername); err != nil {
+		t.Fatalf("FindByLogin after commit error = %v", err)
+	}
+}
+
 func TestCloseReturnsStorageCloseError(t *testing.T) {
 	want := errors.New("close storage")
 	svcCtx := &svc.ServiceContext{Storage: closeStore{err: want}}
@@ -115,3 +196,36 @@ func (s closeStore) Get(context.Context, string) ([]byte, error) { return nil, n
 func (s closeStore) Delete(context.Context, string) error        { return nil }
 func (s closeStore) Ping(context.Context) error                  { return nil }
 func (s closeStore) Close() error                                { return s.err }
+
+func newSvcTxTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	url := os.Getenv("POSTGRES_AUTH_TEST_URL")
+	if url == "" {
+		t.Skip("POSTGRES_AUTH_TEST_URL is required")
+	}
+	runner, err := migration.NewRunner(migration.Config{DatabaseURL: url})
+	if err != nil {
+		t.Fatalf("NewRunner error = %v", err)
+	}
+	if err := runner.Up(context.Background()); err != nil {
+		_ = runner.Close()
+		t.Fatalf("migration Up error = %v", err)
+	}
+	if err := runner.Close(); err != nil {
+		t.Fatalf("migration Close error = %v", err)
+	}
+	db, err := dbpostgres.NewGormDB(context.Background(), dbpostgres.Config{URL: url})
+	if err != nil {
+		t.Fatalf("NewGormDB error = %v", err)
+	}
+	t.Cleanup(func() {
+		sqlDB, err := db.DB()
+		if err != nil {
+			t.Fatalf("db.DB error = %v", err)
+		}
+		if err := sqlDB.Close(); err != nil {
+			t.Fatalf("db Close error = %v", err)
+		}
+	})
+	return db
+}

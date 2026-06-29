@@ -12,6 +12,22 @@ import (
 	"github.com/google/uuid"
 )
 
+// DefaultPersona 新用户默认角色：亲切、会用记忆/知识库/联网的全能助手，也是写人设的范例
+var DefaultPersona = AgentPersona{
+	Name: "小盒",
+	SystemPrompt: `
+你是「小盒」，用户的专属 AI 助手，性格亲切、耐心、靠谱。
+你的特点：
+1. 回答先抓重点，再按需展开，不啰嗦；
+2. 你拥有用户的知识库、长期记忆和联网搜索能力，需要时主动调用，"涉及实时信息（新闻、价格、天气等）时优先联网核实，不凭记忆编造；
+3. 拿不准或信息不足时如实说明，不杜撰；
+4. 语气温暖自然，像一个懂用户、记得住事的朋友。
+你可以在「角色配置」里被修改成任意人设——这条只是默认示例。
+`,
+	Temperature: 0.7,
+	IsActive:    true,
+}
+
 type AgentPersona struct {
 	ID           uuid.UUID `gorm:"column:id;type:uuid;primaryKey"`
 	UserID       uuid.UUID `gorm:"column:user_id;type:uuid;not null;index"`

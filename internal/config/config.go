@@ -23,6 +23,7 @@ type Config struct {
 	LLM           LLMConfig           `yaml:"llm"`
 	Rag           RagConfig           `yaml:"rag"`
 	Memory        MemoryConfig        `yaml:"memory"`
+	Agent         AgentConfig         `yaml:"agent"`
 }
 
 type AppConfig struct {
@@ -98,6 +99,10 @@ type MemoryConfig struct {
 	CommunityMergeThreshold          float64 `yaml:"community_merge_threshold"`
 }
 
+type AgentConfig struct {
+	MaxPersona int `yaml:"max_personas"`
+}
+
 func Load() Config {
 	path := os.Getenv("CONFIG_PATH")
 	if path == "" {
@@ -152,6 +157,9 @@ func defaultConfig() Config {
 			CommunityVoteSemWeight:           0.6,
 			CommunityVoteRelWeight:           0.4,
 			CommunityMergeThreshold:          0.85,
+		},
+		Agent: AgentConfig{
+			MaxPersona: 200,
 		},
 	}
 }

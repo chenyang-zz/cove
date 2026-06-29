@@ -15,6 +15,8 @@ type AgentPersonaRepository interface {
 	Update(ctx context.Context, userID uuid.UUID, agentPersona *models.AgentPersona) (*models.AgentPersona, error)
 	UpdateFields(ctx context.Context, userID uuid.UUID, agentPersonaID uuid.UUID, agentPersona *models.AgentPersona, fields *AgentPersonaUpdateFields) (*models.AgentPersona, error)
 	Delete(ctx context.Context, userID uuid.UUID, agentPersonaID uuid.UUID) error
+	Count(ctx context.Context, userID uuid.UUID) (int64, error)
+	ActivateByID(ctx context.Context, userID uuid.UUID, personaID uuid.UUID) error
 }
 
 type AgentPersonaUpdateFields struct {

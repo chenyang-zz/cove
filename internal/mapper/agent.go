@@ -24,3 +24,15 @@ func AgentConfigToResponse(row *models.AgentConfig) *response.AgentConfigRespons
 		HumanMode:          row.HumanMode,
 	}
 }
+
+func AgentPersonaToResponse(row *models.AgentPersona, avatarUrl string) *response.AgentPersonaResponse {
+	return &response.AgentPersonaResponse{
+		ID:           row.ID,
+		Name:         row.Name,
+		AvatarKey:    row.AvatarKey,
+		AvatarUrl:    avatarUrl,
+		SystemPrompt: row.SystemPrompt,
+		Temperature:  row.Temperature,
+		IsActive:     row.IsActive,
+	}
+}

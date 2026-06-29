@@ -16,6 +16,8 @@ type AgentPersonaRepository struct {
 	db *gorm.DB
 }
 
+
+
 func NewAgentPersonaRepository(db *gorm.DB) repository.AgentPersonaRepository {
 	return &AgentPersonaRepository{db: db}
 }
@@ -101,4 +103,32 @@ func (r *AgentPersonaRepository) Delete(ctx context.Context, userID uuid.UUID, a
 		return xerr.NotFound("智能体人格不存在")
 	}
 	return nil
+}
+
+func (r *AgentPersonaRepository) Count(ctx context.Context, userID uuid.UUID) (int64, error) {
+	var count int64
+	result := r.db.WithContext(ctx).Model(&models.AgentPersona{}).Where("user_id = ?", userID).Count(&count)
+	if result.Error != nil {
+		return 0, xerr.Wrapf(result.Error, "查询智能体角色数量失败")
+	}
+	return count, nil
+}
+
+func (r *AgentPersonaRepository) ActivateByID(ctx context.Context, userID uuid.UUID, personaID uuid.UUID) error {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		err := tx.Model(&models.AgentPersona{}).
+			Where("user_id = ? AND is_active = ?", userID, true).Update("is_active", false).Error
+		if err != nil {
+			return xerr.Wrap(err, "激活智能体角色失败")
+		}
+		err = tx.Model(&models.AgentPersona{}).
+			Where("user_id = ? AND ID = ?", userID, personaID).
+			Update("is_active", true).Error
+		if err != nil {
+			return xerr.Wrap(err, "激活智能体角色失败")
+		}
+		return nil
+	})
+
+	return err
 }

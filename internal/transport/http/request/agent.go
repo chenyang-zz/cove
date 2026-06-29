@@ -21,3 +21,26 @@ type UpdateAgentConfigRequest struct {
 type OptimizePromptRequest struct {
 	SystemPrompt string `json:"system_prompt" binding:"required,min=1,max=4000"`
 }
+
+type ListAgentPersonasRequest struct {
+	All bool `json:"all"`
+}
+
+type CreateAgentPersonaRequest struct {
+	Name         string   `json:"name" binding:"required,min=1,max=64"`
+	AvatarKey    string   `json:"avatar_key" binding:"omitempty,max=512"`
+	SystemPrompt string   `json:"system_prompt" binding:"omitempty,max=4000"`
+	Temperature  *float64 `json:"temperature" binding:"omitempty,gte=0.0,lte=2.0"`
+}
+
+type UriAgentPersonaIDRequest struct {
+	PersonaID string `uri:"persona_id" binding:"required"`
+}
+
+type UpdateAgentPersonaRequest struct {
+	UriAgentPersonaIDRequest
+	Name         *string  `json:"name" binding:"omitempty,min=1,max=64"`
+	AvatarKey    *string  `json:"avatar_key" binding:"omitempty,max=512"`
+	SystemPrompt *string  `json:"system_prompt" binding:"omitempty,max=4000"`
+	Temperature  *float64 `json:"temperature" binding:"omitempty,gte=0.0,lte=2.0"`
+}
