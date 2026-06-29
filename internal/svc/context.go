@@ -8,11 +8,13 @@ import (
 	"time"
 
 	"github.com/boxify/api-go/internal/config"
+	corellm "github.com/boxify/api-go/internal/core/llm"
 	"github.com/boxify/api-go/internal/core/prompt"
 	infraes "github.com/boxify/api-go/internal/infrastructure/db/es"
 	dbneo4j "github.com/boxify/api-go/internal/infrastructure/db/neo4j"
 	dbpostgres "github.com/boxify/api-go/internal/infrastructure/db/postgres"
 	infraredis "github.com/boxify/api-go/internal/infrastructure/db/redis"
+	infrallm "github.com/boxify/api-go/internal/infrastructure/llm"
 	"github.com/boxify/api-go/internal/infrastructure/realtime"
 	realtimeredis "github.com/boxify/api-go/internal/infrastructure/realtime/redis"
 	"github.com/boxify/api-go/internal/infrastructure/security"
@@ -50,6 +52,7 @@ type ServiceContext struct {
 	TokenIssuer  *security.TokenIssuer
 
 	PromptManager *prompt.Manager
+	LLMManager    *corellm.Manager
 
 	closeOnce sync.Once
 	closeErr  error
@@ -99,6 +102,7 @@ func New(ctx context.Context, cfg config.Config) (*ServiceContext, error) {
 		TokenIssuer:  security.NewTokenIssuer(cfg.JWT.Secret, accessTokenTTL),
 
 		PromptManager: prompt.NewManager(filepath.Join("internal", "prompts")),
+		LLMManager:    BuildLLMManager(),
 	}
 
 	redisClient, err := infraredis.NewClient(ctx, infraredis.Config{
@@ -191,6 +195,16 @@ func BuildRealtime(redisClient *infraredis.Client) realtime.Broker {
 		return nil
 	}
 	return realtimeredis.New(redisClient.Raw())
+}
+
+func BuildLLMManager() *corellm.Manager {
+	manager := corellm.NewManager()
+	openAICompatible := infrallm.NewOpenAICompatibleFactory()
+	for _, provider := range []string{"openai", "qwen", "doubao", "deepseek", "zhipu", "qianfan"} {
+		manager.Register(provider, openAICompatible)
+	}
+	manager.Register("anthropic", infrallm.NewAnthropicFactory())
+	return manager
 }
 
 func shouldInitNeo4j(cfg config.Neo4jConfig) bool {

@@ -2,13 +2,11 @@ package agentconfig
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/boxify/api-go/internal/core/llm"
 	"github.com/boxify/api-go/internal/core/prompt"
 	"github.com/boxify/api-go/internal/domain"
-	openaillm "github.com/boxify/api-go/internal/infrastructure/llm"
 	"github.com/boxify/api-go/internal/observability/xlog"
 	"github.com/boxify/api-go/internal/svc"
 	"github.com/boxify/api-go/internal/transport/http/request"
@@ -59,13 +57,15 @@ func (l *OptimizePromptLogic) OptimizePrompt(userID uuid.UUID, input *request.Op
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("apiKey", apiKey)
-	client := openaillm.NewOpenaiLLMClient(
-		apiKey,
-		defaultConfig.ModelName,
-		openaillm.WithTemperature(0.4),
-		openaillm.WithBaseURL(defaultConfig.BaseURL),
-	)
+	client, err := l.svcCtx.LLMManager.NewClient(llm.ModelConfig{
+		Provider: defaultConfig.Provider,
+		Model:    defaultConfig.ModelName,
+		APIKey:   apiKey,
+		BaseURL:  defaultConfig.BaseURL,
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	promptText, err := l.svcCtx.PromptManager.AgentPrompts.OptimizePrompt(&prompt.OptimizePromptData{
 		RawPrompt: input.SystemPrompt,
@@ -75,7 +75,7 @@ func (l *OptimizePromptLogic) OptimizePrompt(userID uuid.UUID, input *request.Op
 	}
 	result, err := client.Invoke(l.ctx, []*llm.Message{
 		llm.UserMessage(promptText),
-	})
+	}, llm.WithTemperature(0.4))
 	if err != nil {
 		return nil, xerr.Wrapf(err, "调用模型失败, err: %v", err)
 	}

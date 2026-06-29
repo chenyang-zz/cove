@@ -6,7 +6,7 @@ type ListModelsRequest struct {
 
 type CreateModelRequest struct {
 	Type       string   `json:"type" form:"type" binding:"required,oneof=chat multimodal embedding rerank websearch asr"`
-	Provider   string   `json:"provider" form:"provider" binding:"required,oneof=openai qwen doubao deepseek zhipu qianfan tavily"`
+	Provider   string   `json:"provider" form:"provider" binding:"required,oneof=openai anthropic qwen doubao deepseek zhipu qianfan tavily"`
 	Name       string   `json:"name" form:"name" binding:"required,min=1,max=128"`
 	ModelName  string   `json:"model_name" form:"model_name" binding:"required,min=1,max=128"`
 	ApiKey     string   `json:"api_key" form:"api_key" binding:"required,min=1"`

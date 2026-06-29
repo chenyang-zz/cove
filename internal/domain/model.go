@@ -9,7 +9,8 @@ package domain
 type ModelProviderType string
 
 const (
-	OpenaiProvider ModelProviderType = "openai"
+	OpenaiProvider    ModelProviderType = "openai"
+	AnthropicProvider ModelProviderType = "anthropic"
 )
 
 type ModelType string

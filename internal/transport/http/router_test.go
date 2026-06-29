@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/boxify/api-go/internal/domain"
+	"github.com/boxify/api-go/internal/infrastructure/realtime"
 	"github.com/boxify/api-go/internal/infrastructure/security"
 	"github.com/boxify/api-go/internal/models"
 	"github.com/boxify/api-go/internal/repository"
@@ -32,6 +33,7 @@ func newTestRouter(t *testing.T, enableDebugPanicRoute ...bool) http.Handler {
 		ModelConfigRepo:  &testModelConfigRepository{},
 		ConversationRepo: newTestConversationRepository(),
 		MessageRepo:      newTestMessageRepository(),
+		Realtime:         testRealtimeBroker{},
 		SecretCipher:     cipher,
 		TokenIssuer:      security.NewTokenIssuer("test-secret", time.Hour),
 	}
@@ -42,6 +44,32 @@ func newTestRouter(t *testing.T, enableDebugPanicRoute ...bool) http.Handler {
 		deps.EnableDebugPanicRoute = enableDebugPanicRoute[0]
 	}
 	return httptransport.NewRouter(deps)
+}
+
+type testRealtimeBroker struct{}
+
+func (testRealtimeBroker) Publish(ctx context.Context, topic string, event domain.Event) error {
+	return nil
+}
+
+func (testRealtimeBroker) Subscribe(ctx context.Context, topic string) (realtime.Subscription, error) {
+	events := make(chan domain.Event, 2)
+	events <- domain.NewTokenEvent("345")
+	events <- domain.NewDoneEvent("ok")
+	close(events)
+	return testRealtimeSubscription{events: events}, nil
+}
+
+type testRealtimeSubscription struct {
+	events <-chan domain.Event
+}
+
+func (s testRealtimeSubscription) Events() <-chan domain.Event {
+	return s.events
+}
+
+func (s testRealtimeSubscription) Close(ctx context.Context) error {
+	return nil
 }
 
 type testModelConfigRepository struct {
