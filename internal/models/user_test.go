@@ -85,6 +85,36 @@ func TestModelConfigGormTags(t *testing.T) {
 	}
 }
 
+func TestKnowledgeBaseGormTags(t *testing.T) {
+	// 验证知识库模型包含展示字段和用户隔离所需的 GORM 标签。
+	modelType := reflect.TypeOf(KnowledgeBase{})
+	tests := map[string][]string{
+		"ID":          {"column:id", "type:uuid", "primaryKey"},
+		"UserID":      {"column:user_id", "type:uuid", "not null", "index"},
+		"User":        {"foreignKey:UserID", "references:ID", "OnDelete:CASCADE"},
+		"Name":        {"column:name", "size:128", "not null"},
+		"Description": {"column:description", "size:512"},
+		"Icon":        {"column:icon", "size:16"},
+		"Color":       {"column:color", "size:16", "default:''"},
+		"IsDefault":   {"column:is_default", "default:false", "index"},
+		"ChatEnabled": {"column:chat_enabled", "default:false"},
+		"CreatedAt":   {"column:created_at", "autoCreateTime"},
+		"UpdatedAt":   {"column:updated_at", "autoUpdateTime"},
+	}
+	for fieldName, wantParts := range tests {
+		field, ok := modelType.FieldByName(fieldName)
+		if !ok {
+			t.Fatalf("missing field %s", fieldName)
+		}
+		tag := field.Tag.Get("gorm")
+		for _, want := range wantParts {
+			if !strings.Contains(tag, want) {
+				t.Fatalf("%s gorm tag = %q, want to contain %q", fieldName, tag, want)
+			}
+		}
+	}
+}
+
 func TestStringListScansAndValuesJSON(t *testing.T) {
 	var list StringList
 	if err := list.Scan([]byte(`["function_call","vision"]`)); err != nil {
@@ -132,6 +162,7 @@ func TestRefreshTokenGormTags(t *testing.T) {
 }
 
 func TestBeforeCreateAssignsUUIDWhenIDIsNil(t *testing.T) {
+	// 验证包含知识库在内的核心模型创建前会自动补齐 UUID。
 	tests := []struct {
 		name string
 		run  func(t *testing.T)
@@ -196,6 +227,18 @@ func TestBeforeCreateAssignsUUIDWhenIDIsNil(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "knowledge base",
+			run: func(t *testing.T) {
+				row := &KnowledgeBase{}
+				if err := row.BeforeCreate(nil); err != nil {
+					t.Fatalf("BeforeCreate error = %v", err)
+				}
+				if row.ID == uuid.Nil {
+					t.Fatal("ID remained nil")
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -204,6 +247,7 @@ func TestBeforeCreateAssignsUUIDWhenIDIsNil(t *testing.T) {
 }
 
 func TestBeforeCreatePreservesExistingUUID(t *testing.T) {
+	// 验证包含知识库在内的核心模型已有 UUID 时不会被覆盖。
 	tests := []struct {
 		name string
 		run  func(t *testing.T)
@@ -265,6 +309,19 @@ func TestBeforeCreatePreservesExistingUUID(t *testing.T) {
 			run: func(t *testing.T) {
 				id := uuid.New()
 				row := &Message{ID: id}
+				if err := row.BeforeCreate(nil); err != nil {
+					t.Fatalf("BeforeCreate error = %v", err)
+				}
+				if row.ID != id {
+					t.Fatalf("ID = %s, want %s", row.ID, id)
+				}
+			},
+		},
+		{
+			name: "knowledge base",
+			run: func(t *testing.T) {
+				id := uuid.New()
+				row := &KnowledgeBase{ID: id}
 				if err := row.BeforeCreate(nil); err != nil {
 					t.Fatalf("BeforeCreate error = %v", err)
 				}

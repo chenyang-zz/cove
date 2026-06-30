@@ -3,6 +3,7 @@ package migration
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -13,7 +14,19 @@ func TestNewRunnerRejectsBlankDatabaseURL(t *testing.T) {
 	}
 }
 
+func TestRunnerUpIncludesKnowledgeBaseModel(t *testing.T) {
+	// 验证迁移清单包含知识库模型，避免 knowledge_bases 表或 color 列遗漏。
+	source, err := os.ReadFile("runner.go")
+	if err != nil {
+		t.Fatalf("read runner.go: %v", err)
+	}
+	if !strings.Contains(string(source), "&models.KnowledgeBase{}") {
+		t.Fatal("Runner.Up does not migrate models.KnowledgeBase")
+	}
+}
+
 func TestRunnerIntegrationWhenPostgresEnvIsConfigured(t *testing.T) {
+	// 验证真实 Postgres 迁移会创建知识库表和展示字段。
 	url := os.Getenv("POSTGRES_MIGRATION_TEST_URL")
 	if url == "" {
 		t.Skip("POSTGRES_MIGRATION_TEST_URL is required")
@@ -96,5 +109,19 @@ func TestRunnerIntegrationWhenPostgresEnvIsConfigured(t *testing.T) {
 	}
 	if !tokenHashUnique {
 		t.Fatal("unique index for token_hash does not exist")
+	}
+	for _, column := range []string{"id", "user_id", "name", "description", "icon", "color", "is_default", "chat_enabled", "created_at", "updated_at"} {
+		var exists bool
+		err := db.QueryRowContext(context.Background(), `
+			SELECT EXISTS (
+				SELECT 1 FROM information_schema.columns
+				WHERE table_name = 'knowledge_bases' AND column_name = $1
+			)`, column).Scan(&exists)
+		if err != nil {
+			t.Fatalf("query knowledge base column %s: %v", column, err)
+		}
+		if !exists {
+			t.Fatalf("knowledge base column %s does not exist", column)
+		}
 	}
 }

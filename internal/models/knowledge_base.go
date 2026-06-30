@@ -26,6 +26,7 @@ type KnowledgeBase struct {
 	Name        string    `gorm:"column:name;size:128;not null"`
 	Description string    `gorm:"column:description;size:512"`
 	Icon        string    `gorm:"column:icon;size:16"`
+	Color       string    `gorm:"column:color;size:16;default:''"`
 	IsDefault   bool      `gorm:"column:is_default;not null;default:false;index"`
 	ChatEnabled bool      `gorm:"column:chat_enabled;not null;default:false"` // 是否参与对话检索：对话时检索所有 chat_enabled=True 的库。默认库默认开，其余默认关。
 	CreatedAt   time.Time `gorm:"column:created_at;autoCreateTime"`

@@ -28,14 +28,15 @@ func newTestRouter(t *testing.T, enableDebugPanicRoute ...bool) http.Handler {
 		t.Fatalf("new cipher: %v", err)
 	}
 	svcCtx := &svc.ServiceContext{
-		UserRepo:         newTestUserRepository(),
-		RefreshTokenRepo: newTestRefreshTokenRepository(),
-		ModelConfigRepo:  &testModelConfigRepository{},
-		ConversationRepo: newTestConversationRepository(),
-		MessageRepo:      newTestMessageRepository(),
-		Realtime:         testRealtimeBroker{},
-		SecretCipher:     cipher,
-		TokenIssuer:      security.NewTokenIssuer("test-secret", time.Hour),
+		UserRepo:          newTestUserRepository(),
+		RefreshTokenRepo:  newTestRefreshTokenRepository(),
+		ModelConfigRepo:   &testModelConfigRepository{},
+		ConversationRepo:  newTestConversationRepository(),
+		MessageRepo:       newTestMessageRepository(),
+		KnowledgeBaseRepo: newTestKnowledgeBaseRepository(),
+		Realtime:          testRealtimeBroker{},
+		SecretCipher:      cipher,
+		TokenIssuer:       security.NewTokenIssuer("test-secret", time.Hour),
 	}
 	deps := httptransport.Dependencies{
 		Svc: svcCtx,
@@ -275,6 +276,85 @@ func (r *testMessageRepository) Count(ctx context.Context, conversationID uuid.U
 	return count, nil
 }
 
+type testKnowledgeBaseRepository struct {
+	rows []*models.KnowledgeBase
+}
+
+func newTestKnowledgeBaseRepository() *testKnowledgeBaseRepository {
+	return &testKnowledgeBaseRepository{}
+}
+
+func (r *testKnowledgeBaseRepository) Create(ctx context.Context, userID uuid.UUID, row *models.KnowledgeBase) (*models.KnowledgeBase, error) {
+	if row.ID == uuid.Nil {
+		row.ID = uuid.New()
+	}
+	row.UserID = userID
+	r.rows = append(r.rows, row)
+	return row, nil
+}
+
+func (r *testKnowledgeBaseRepository) List(ctx context.Context, userID uuid.UUID) ([]*models.KnowledgeBase, error) {
+	out := make([]*models.KnowledgeBase, 0, len(r.rows))
+	for _, row := range r.rows {
+		if row.UserID == userID {
+			out = append(out, row)
+		}
+	}
+	return out, nil
+}
+
+func (r *testKnowledgeBaseRepository) FindByID(ctx context.Context, userID uuid.UUID, knowledgeBaseID uuid.UUID) (*models.KnowledgeBase, error) {
+	for _, row := range r.rows {
+		if row.ID == knowledgeBaseID && row.UserID == userID {
+			return row, nil
+		}
+	}
+	return nil, xerr.NotFound("知识库不存在")
+}
+
+func (r *testKnowledgeBaseRepository) Update(ctx context.Context, userID uuid.UUID, row *models.KnowledgeBase) (*models.KnowledgeBase, error) {
+	for i, existing := range r.rows {
+		if existing.ID == row.ID && existing.UserID == userID {
+			row.UserID = userID
+			r.rows[i] = row
+			return row, nil
+		}
+	}
+	return nil, xerr.NotFound("知识库不存在")
+}
+
+func (r *testKnowledgeBaseRepository) UpdateFields(ctx context.Context, userID uuid.UUID, knowledgeBaseID uuid.UUID, row *models.KnowledgeBase, fields *repository.KnowledgeBaseUpdateFields) (*models.KnowledgeBase, error) {
+	existing, err := r.FindByID(ctx, userID, knowledgeBaseID)
+	if err != nil {
+		return nil, err
+	}
+	for _, column := range fields.Columns() {
+		switch column {
+		case "name":
+			existing.Name = row.Name
+		case "description":
+			existing.Description = row.Description
+		case "icon":
+			existing.Icon = row.Icon
+		case "color":
+			existing.Color = row.Color
+		case "chat_enabled":
+			existing.ChatEnabled = row.ChatEnabled
+		}
+	}
+	return existing, nil
+}
+
+func (r *testKnowledgeBaseRepository) Delete(ctx context.Context, userID uuid.UUID, knowledgeBaseID uuid.UUID) error {
+	for i, row := range r.rows {
+		if row.ID == knowledgeBaseID && row.UserID == userID {
+			r.rows = append(r.rows[:i], r.rows[i+1:]...)
+			return nil
+		}
+	}
+	return xerr.NotFound("知识库不存在")
+}
+
 type testUserRepository struct {
 	byID    map[uuid.UUID]*models.User
 	byLogin map[string]*models.User
@@ -454,5 +534,90 @@ func TestChatStreamSetsSSEHeadersAndEvents(t *testing.T) {
 		if !events[name] {
 			t.Fatalf("missing SSE event %q in body:\n%s", name, w.Body.String())
 		}
+	}
+}
+
+func TestKnowledgeBaseRoutesBindColorAndFalseChatEnabled(t *testing.T) {
+	// 验证知识库 HTTP 路由会绑定 color 字段，允许 chat_enabled=false，并返回更新后的响应。
+	router := newTestRouter(t)
+
+	create := httptest.NewRecorder()
+	createReq := httptest.NewRequest(http.MethodPost, "/api/knowledge-base/create", strings.NewReader(`{"name":"资料库","description":"说明","icon":"book","color":"#22c55e"}`))
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.Header.Set("Authorization", "Bearer dev-token")
+	router.ServeHTTP(create, createReq)
+	if create.Code != http.StatusOK {
+		t.Fatalf("create status = %d body=%s", create.Code, create.Body.String())
+	}
+	var createBody struct {
+		Data struct {
+			ID          string `json:"id"`
+			Name        string `json:"name"`
+			Color       string `json:"color"`
+			ChatEnabled bool   `json:"chat_enabled"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(create.Body.Bytes(), &createBody); err != nil {
+		t.Fatalf("unmarshal create body: %v", err)
+	}
+	if createBody.Data.ID == "" || createBody.Data.Name != "资料库" || createBody.Data.Color != "#22c55e" || createBody.Data.ChatEnabled {
+		t.Fatalf("create body = %+v, want saved color and disabled chat", createBody.Data)
+	}
+
+	toggle := httptest.NewRecorder()
+	toggleReq := httptest.NewRequest(http.MethodPost, "/api/knowledge-base/"+createBody.Data.ID+"/chat-enabled", strings.NewReader(`{"chat_enabled":false}`))
+	toggleReq.Header.Set("Content-Type", "application/json")
+	toggleReq.Header.Set("Authorization", "Bearer dev-token")
+	router.ServeHTTP(toggle, toggleReq)
+	if toggle.Code != http.StatusOK {
+		t.Fatalf("toggle status = %d body=%s", toggle.Code, toggle.Body.String())
+	}
+	var toggleBody struct {
+		Data struct {
+			ID          string `json:"id"`
+			ChatEnabled bool   `json:"chat_enabled"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(toggle.Body.Bytes(), &toggleBody); err != nil {
+		t.Fatalf("unmarshal toggle body: %v", err)
+	}
+	if toggleBody.Data.ID != createBody.Data.ID || toggleBody.Data.ChatEnabled {
+		t.Fatalf("toggle body = %+v, want updated knowledge base with chat disabled", toggleBody.Data)
+	}
+}
+
+func TestKnowledgeBaseListCreatesDefaultForFreshUser(t *testing.T) {
+	// 验证知识库列表接口会为没有默认知识库的新用户返回自动创建的默认库。
+	router := newTestRouter(t)
+
+	list := httptest.NewRecorder()
+	listReq := httptest.NewRequest(http.MethodGet, "/api/knowledge-base/", nil)
+	listReq.Header.Set("Authorization", "Bearer dev-token")
+	router.ServeHTTP(list, listReq)
+	if list.Code != http.StatusOK {
+		t.Fatalf("list status = %d body=%s", list.Code, list.Body.String())
+	}
+	var listBody struct {
+		Data struct {
+			List []struct {
+				Name        string `json:"name"`
+				Description string `json:"description"`
+				Icon        string `json:"icon"`
+				Color       string `json:"color"`
+				IsDefault   bool   `json:"is_default"`
+				ChatEnabled bool   `json:"chat_enabled"`
+			} `json:"list"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(list.Body.Bytes(), &listBody); err != nil {
+		t.Fatalf("unmarshal list body: %v", err)
+	}
+	if len(listBody.Data.List) != 1 {
+		t.Fatalf("list len = %d, want 1", len(listBody.Data.List))
+	}
+	got := listBody.Data.List[0]
+	if got.Name != "默认知识库" || got.Description != "未分类资料默认归入此库" || got.Icon != "📚" ||
+		got.Color != "#155EEF" || !got.IsDefault || !got.ChatEnabled {
+		t.Fatalf("default knowledge base = %+v, want configured default", got)
 	}
 }

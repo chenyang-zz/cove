@@ -40,6 +40,10 @@ func (f *KnowledgeBaseUpdateFields) Icon() *KnowledgeBaseUpdateFields {
 	return f.add("icon")
 }
 
+func (f *KnowledgeBaseUpdateFields) Color() *KnowledgeBaseUpdateFields {
+	return f.add("color")
+}
+
 func (f *KnowledgeBaseUpdateFields) IsDefault() *KnowledgeBaseUpdateFields {
 	return f.add("is_default")
 }
