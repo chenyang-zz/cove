@@ -1,0 +1,53 @@
+internal/core/mcp/sdk_client.go
+  h_e1f1392360ad67 29
+  s_a5f282227fb606::t_7fc387f247a4ea 7-8,57-60,63,65,83,102-126
+  s_a5f282227fb606::t_166a13f98f6386 127
+internal/core/mcp/sdk_client_test.go
+  s_a5f282227fb606::t_4d88e7b2baaa49 1-85
+AGENTS.md
+  s_a5f282227fb606::t_d710cfbdcb7383 4
+internal/mapper/mcp_test.go
+  s_a5f282227fb606::t_e6106a44f48f58 51-55,63-64
+  s_a5f282227fb606::t_ccc17f9304dbec 65
+internal/transport/http/request/mcp.go
+  s_a5f282227fb606::t_db26ae0c0bd355 25-29
+cmd/codegen/main_test.go
+  s_68c6fb60822163::t_d0bd7d99ce80fd 1659-1660
+internal/logic/mcpserver/mcpserver_test.go
+  s_a5f282227fb606::t_c9c218b4969fd4 213-255,687-726
+  s_a5f282227fb606::t_ad9ac6f629ee81 423-467,727
+  s_a5f282227fb606::t_c8b3119835bb04 728
+CLAUDE.md
+  s_a5f282227fb606::t_d710cfbdcb7383 4
+internal/logic/mcpserver/helper.go
+  s_a5f282227fb606::t_faa7dcba0b3943 39-44,72-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "f748fd7bcae782b0f94ecdbf70859b148547b934",
+  "prompts": {},
+  "humans": {
+    "h_e1f1392360ad67": {
+      "author": "chenyang <904852749@qq.com>"
+    }
+  },
+  "sessions": {
+    "s_68c6fb60822163": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eef3b-556e-7b21-8e7d-a378edabe8e9",
+        "model": "gpt-5.5"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    },
+    "s_a5f282227fb606": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f13c4-cb77-7061-8d78-bfdb2b2034a3",
+        "model": "gpt-5.5"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
