@@ -52,7 +52,14 @@ func scanRouteFile(path string) ([]Route, error) {
 			continue
 		}
 		handlerTypes := handlerTypesByParam(fn)
+		groupPaths := map[string]string{}
 		ast.Inspect(fn.Body, func(node ast.Node) bool {
+			switch item := node.(type) {
+			case *ast.AssignStmt:
+				recordGroupAssignments(item, groupPaths)
+			case *ast.ValueSpec:
+				recordGroupValueSpec(item, groupPaths)
+			}
 			call, ok := node.(*ast.CallExpr)
 			if !ok {
 				return true
@@ -75,7 +82,7 @@ func scanRouteFile(path string) ([]Route, error) {
 			}
 			routes = append(routes, Route{
 				HTTPMethod:    method,
-				Path:          routePathFromCall(call),
+				Path:          fullRoutePath(call, groupPaths),
 				HandlerVar:    handlerIdent.Name,
 				HandlerType:   handlerType,
 				HandlerMethod: handlerSelector.Sel.Name,
@@ -87,6 +94,72 @@ func scanRouteFile(path string) ([]Route, error) {
 		})
 	}
 	return routes, nil
+}
+
+func recordGroupAssignments(stmt *ast.AssignStmt, groupPaths map[string]string) {
+	for i, lhs := range stmt.Lhs {
+		if i >= len(stmt.Rhs) {
+			continue
+		}
+		name, ok := lhs.(*ast.Ident)
+		if !ok {
+			continue
+		}
+		if path, ok := groupPathFromExpr(stmt.Rhs[i], groupPaths); ok {
+			groupPaths[name.Name] = path
+		}
+	}
+}
+
+func recordGroupValueSpec(spec *ast.ValueSpec, groupPaths map[string]string) {
+	for i, name := range spec.Names {
+		if i >= len(spec.Values) {
+			continue
+		}
+		if path, ok := groupPathFromExpr(spec.Values[i], groupPaths); ok {
+			groupPaths[name.Name] = path
+		}
+	}
+}
+
+func groupPathFromExpr(expr ast.Expr, groupPaths map[string]string) (string, bool) {
+	call, ok := expr.(*ast.CallExpr)
+	if !ok {
+		return "", false
+	}
+	selector, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || selector.Sel.Name != "Group" {
+		return "", false
+	}
+	base := ""
+	if ident, ok := selector.X.(*ast.Ident); ok {
+		base = groupPaths[ident.Name]
+	}
+	return joinRoutePath(base, routePathFromCall(call)), true
+}
+
+func fullRoutePath(call *ast.CallExpr, groupPaths map[string]string) string {
+	base := ""
+	if selector, ok := call.Fun.(*ast.SelectorExpr); ok {
+		if ident, ok := selector.X.(*ast.Ident); ok {
+			base = groupPaths[ident.Name]
+		}
+	}
+	return joinRoutePath(base, routePathFromCall(call))
+}
+
+func joinRoutePath(base string, path string) string {
+	if base == "" {
+		base = "/"
+	}
+	if path == "" {
+		path = "/"
+	}
+	joined := strings.TrimRight(base, "/") + "/" + strings.TrimLeft(path, "/")
+	if joined == "" || joined == "/" {
+		return "/"
+	}
+	return strings.TrimRight(joined, "/")
 }
 
 func routePathFromCall(call *ast.CallExpr) string {

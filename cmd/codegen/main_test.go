@@ -232,6 +232,7 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMidd
 }
 
 func TestScanRoutesFindsHandlerAfterMiddlewareArgs(t *testing.T) {
+	// 验证扫描路由时能跳过 middleware 参数，并保留 Gin group 前缀形成完整路径。
 	root := t.TempDir()
 	writeFile(t, root, "internal/transport/http/routes/book.go", `package routes
 
@@ -257,8 +258,8 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMidd
 	if routes[0].HandlerType != "BookHandler" || routes[0].HandlerMethod != "Update" {
 		t.Fatalf("route = %+v, want BookHandler.Update", routes[0])
 	}
-	if routes[0].Path != "/:id" {
-		t.Fatalf("route path = %q, want /:id", routes[0].Path)
+	if routes[0].Path != "/books/:id" {
+		t.Fatalf("route path = %q, want /books/:id", routes[0].Path)
 	}
 }
 
@@ -1518,6 +1519,179 @@ func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler) {
 	}
 }
 
+func TestGenerateDocsCreatesOpenAPISpec(t *testing.T) {
+	// 验证 docs 生成器能从 route 指令和 DTO tag 生成 OpenAPI 路径、参数、请求体和鉴权信息。
+	root := t.TempDir()
+	writeFile(t, root, "internal/transport/http/routes/book.go", `package routes
+
+import (
+	"github.com/boxify/api-go/internal/transport/http/handler"
+	"github.com/gin-gonic/gin"
+)
+
+func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler, authMiddleware gin.HandlerFunc) {
+	bookRoutes := api.Group("/books")
+	// @auth(user_id)
+	// @summary 创建图书
+	// @description 创建图书。
+	// 保存图书基础信息。
+	// @tag 图书
+	// @input request.CreateBookRequest
+	// @response BookResponse
+	bookRoutes.POST("", authMiddleware, book.Create)
+	// @auth(user_id)
+	// @summary 查询图书章节
+	// @input request.ListBookChaptersRequest
+	// @response ListResponse[*response.ChapterResponse]
+	bookRoutes.GET("/:book_id/chapters", authMiddleware, book.ListChapters)
+}
+`)
+	writeFile(t, root, "internal/transport/http/request/book.go", `package request
+
+type CreateBookRequest struct {
+	Title string `+"`json:\"title\" binding:\"required,min=1,max=128\"`"+`
+	Kind  string `+"`json:\"kind\" binding:\"omitempty,oneof=novel essay\"`"+`
+}
+
+type ListBookChaptersRequest struct {
+	BookID string `+"`uri:\"book_id\" binding:\"required\"`"+`
+	Page   int    `+"`form:\"page\" binding:\"omitempty,min=1\"`"+`
+}
+`)
+	writeFile(t, root, "internal/transport/http/response/book.go", `package response
+
+type BookResponse struct {
+	ID    string `+"`json:\"id\"`"+`
+	Title string `+"`json:\"title\"`"+`
+}
+
+type ChapterResponse struct {
+	ID string `+"`json:\"id\"`"+`
+}
+`)
+
+	report, err := GenerateDocs(DocsOptions{Root: root})
+	if err != nil {
+		t.Fatalf("GenerateDocs error = %v", err)
+	}
+	assertReportContains(t, report, FileAdded, "docs/openapi.json")
+
+	var spec map[string]any
+	if err := json.Unmarshal([]byte(readFile(t, root, "docs/openapi.json")), &spec); err != nil {
+		t.Fatalf("openapi json invalid: %v", err)
+	}
+	if spec["openapi"] != "3.0.3" {
+		t.Fatalf("openapi = %v, want 3.0.3", spec["openapi"])
+	}
+	paths := spec["paths"].(map[string]any)
+	create := paths["/api/books"].(map[string]any)["post"].(map[string]any)
+	if create["summary"] != "创建图书" || create["description"] != "创建图书。\n保存图书基础信息。" {
+		t.Fatalf("create operation = %+v", create)
+	}
+	if len(create["security"].([]any)) == 0 {
+		t.Fatalf("security = %+v, want bearer auth", create["security"])
+	}
+	if create["requestBody"] == nil {
+		t.Fatalf("requestBody missing: %+v", create)
+	}
+	list := paths["/api/books/{book_id}/chapters"].(map[string]any)["get"].(map[string]any)
+	params := list["parameters"].([]any)
+	if len(params) != 2 {
+		t.Fatalf("parameters = %+v, want path and query params", params)
+	}
+}
+
+func TestGenerateDocsHandlesMultipartAndSSE(t *testing.T) {
+	// 验证 multipart 文件上传和 SSE 路由会生成对应的 content type。
+	root := t.TempDir()
+	writeFile(t, root, "internal/transport/http/routes/document.go", `package routes
+
+import (
+	"github.com/boxify/api-go/internal/transport/http/handler"
+	"github.com/gin-gonic/gin"
+)
+
+func RegisterDocumentRoutes(api *gin.RouterGroup, doc handler.DocumentHandler, chat handler.ChatHandler, authMiddleware gin.HandlerFunc) {
+	// @auth(user_id)
+	// @input request.UploadDocumentRequest
+	// @response DocumentResponse
+	api.POST("/documents", authMiddleware, doc.Upload)
+	// @auth(user_id)
+	// @sse
+	// @event domain.Event
+	// @input request.ChatStreamRequest
+	api.POST("/chat/stream", authMiddleware, chat.ChatStream)
+}
+`)
+	writeFile(t, root, "internal/transport/http/request/document.go", `package request
+
+import "mime/multipart"
+
+type UploadDocumentRequest struct {
+	File *multipart.FileHeader `+"`form:\"file\" binding:\"required\"`"+`
+	Tags []string `+"`form:\"tags\" binding:\"omitempty\"`"+`
+}
+
+type ChatStreamRequest struct {
+	Message string `+"`json:\"message\" binding:\"required\"`"+`
+}
+`)
+	writeFile(t, root, "internal/transport/http/response/document.go", `package response
+
+type DocumentResponse struct {
+	ID string `+"`json:\"id\"`"+`
+}
+`)
+
+	if _, err := GenerateDocs(DocsOptions{Root: root}); err != nil {
+		t.Fatalf("GenerateDocs error = %v", err)
+	}
+	var spec map[string]any
+	if err := json.Unmarshal([]byte(readFile(t, root, "docs/openapi.json")), &spec); err != nil {
+		t.Fatalf("openapi json invalid: %v", err)
+	}
+	paths := spec["paths"].(map[string]any)
+	upload := paths["/api/documents"].(map[string]any)["post"].(map[string]any)
+	uploadContent := upload["requestBody"].(map[string]any)["content"].(map[string]any)
+	if uploadContent["multipart/form-data"] == nil {
+		t.Fatalf("upload content = %+v, want multipart/form-data", uploadContent)
+	}
+	stream := paths["/api/chat/stream"].(map[string]any)["post"].(map[string]any)
+	responses := stream["responses"].(map[string]any)["200"].(map[string]any)["content"].(map[string]any)
+	if responses["text/event-stream"] == nil {
+		t.Fatalf("stream response content = %+v, want text/event-stream", responses)
+	}
+}
+
+func TestRunDocsCommandCheckFailsWhenSpecOutdated(t *testing.T) {
+	// 验证 docs --check 在 OpenAPI 文件缺失或过期时返回 ErrCheckFailed，供 CI 使用。
+	root := t.TempDir()
+	writeFile(t, root, "internal/transport/http/routes/book.go", `package routes
+
+import (
+	"github.com/boxify/api-go/internal/transport/http/handler"
+	"github.com/gin-gonic/gin"
+)
+
+func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler) {
+	// routegen: output=response.BookResponse
+	api.GET("/books", book.List)
+}
+`)
+	writeFile(t, root, "internal/transport/http/response/book.go", `package response
+
+type BookResponse struct {
+	ID string `+"`json:\"id\"`"+`
+}
+`)
+
+	report, err := runDocsCommand([]string{"-root", root, "--check", "--no-color"})
+	if !errors.Is(err, ErrCheckFailed) {
+		t.Fatalf("runDocsCommand error = %v, want ErrCheckFailed", err)
+	}
+	assertReportContains(t, report, FileWouldAdd, "docs/openapi.json")
+}
+
 func TestPrintReportJSONIncludesModeCommandAndDiagnostics(t *testing.T) {
 	// 验证 JSON report 可被脚本解析，并包含工具模式、命令和诊断信息。
 	report := Report{
@@ -1654,6 +1828,40 @@ type Message struct {
 	}
 	if len(report.Files) != 0 {
 		t.Fatalf("files = %+v, want no generated files", report.Files)
+	}
+}
+
+func TestDoctorReportsMissingResponseAndURIField(t *testing.T) {
+	// 验证 doctor 能发现缺少响应声明，以及 path 参数没有对应 uri 字段的问题。
+	root := t.TempDir()
+	writeFile(t, root, "internal/transport/http/routes/book.go", `package routes
+
+import (
+	"github.com/boxify/api-go/internal/transport/http/handler"
+	"github.com/gin-gonic/gin"
+)
+
+func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler) {
+	// @input request.RenameBookRequest
+	api.PATCH("/books/:book_id", book.Rename)
+}
+`)
+	writeFile(t, root, "internal/transport/http/request/book.go", `package request
+
+type RenameBookRequest struct {
+	Title string `+"`json:\"title\" binding:\"required\"`"+`
+}
+`)
+
+	report, err := RunDoctor(DoctorOptions{Root: root})
+	if err != nil {
+		t.Fatalf("RunDoctor error = %v", err)
+	}
+	if !report.HasDiagnostic("route.response.missing") {
+		t.Fatalf("diagnostics = %+v, want missing response", report.Diagnostics)
+	}
+	if !report.HasDiagnostic("route.uri.missing_field") {
+		t.Fatalf("diagnostics = %+v, want missing uri field", report.Diagnostics)
 	}
 }
 

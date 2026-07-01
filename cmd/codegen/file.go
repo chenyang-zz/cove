@@ -67,6 +67,32 @@ func writeGeneratedFile(path, content string, report *Report) error {
 	return os.WriteFile(path, formatted, 0o644)
 }
 
+func writeDataFile(path string, data []byte, report *Report) error {
+	if existing, err := os.ReadFile(path); err == nil {
+		if bytes.Equal(existing, data) {
+			report.Add(FileUnchanged, path)
+			return nil
+		}
+		if report.IsPreview() {
+			report.Add(FileWouldModify, path)
+			return nil
+		}
+		report.Add(FileModified, path)
+		return os.WriteFile(path, data, 0o644)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if report.IsPreview() {
+		report.Add(FileWouldAdd, path)
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	report.Add(FileAdded, path)
+	return os.WriteFile(path, data, 0o644)
+}
+
 func appendGoFile(path string, imports []string, body string, report *Report) error {
 	data, err := os.ReadFile(path)
 	if err != nil {

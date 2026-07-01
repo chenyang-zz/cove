@@ -2,6 +2,7 @@
   <dictionary name="project">
     <words>
       <w>Conns</w>
+      <w>asynq</w>
       <w>gorm</w>
       <w>imgs</w>
       <w>kbid</w>

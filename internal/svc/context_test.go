@@ -8,9 +8,11 @@ import (
 	"testing"
 
 	"github.com/boxify/api-go/internal/config"
+	"github.com/boxify/api-go/internal/domain"
 	"github.com/boxify/api-go/internal/infrastructure/db/migration"
 	dbpostgres "github.com/boxify/api-go/internal/infrastructure/db/postgres"
 	infraredis "github.com/boxify/api-go/internal/infrastructure/db/redis"
+	"github.com/boxify/api-go/internal/infrastructure/queue"
 	"github.com/boxify/api-go/internal/infrastructure/storage"
 	"github.com/boxify/api-go/internal/models"
 	repositorypostgres "github.com/boxify/api-go/internal/repository/postgres"
@@ -187,6 +189,19 @@ func TestCloseReturnsStorageCloseError(t *testing.T) {
 	}
 }
 
+func TestCloseClosesTaskProducer(t *testing.T) {
+	// 验证 ServiceContext 关闭时会释放任务 producer，避免 Redis 连接泄漏。
+	producer := &closeTaskProducer{}
+	svcCtx := &svc.ServiceContext{TaskProducer: producer}
+
+	if err := svcCtx.Close(context.Background()); err != nil {
+		t.Fatalf("Close error = %v", err)
+	}
+	if !producer.closed {
+		t.Fatal("task producer was not closed")
+	}
+}
+
 type closeStore struct {
 	err error
 }
@@ -196,6 +211,19 @@ func (s closeStore) Get(context.Context, string) ([]byte, error) { return nil, n
 func (s closeStore) Delete(context.Context, string) error        { return nil }
 func (s closeStore) Ping(context.Context) error                  { return nil }
 func (s closeStore) Close() error                                { return s.err }
+
+type closeTaskProducer struct {
+	closed bool
+}
+
+func (p *closeTaskProducer) Enqueue(context.Context, *domain.Task, ...queue.EnqueueOption) (*queue.TaskInfo, error) {
+	return &queue.TaskInfo{ID: "task-id", Queue: domain.QueueParse}, nil
+}
+
+func (p *closeTaskProducer) Close() error {
+	p.closed = true
+	return nil
+}
 
 func newSvcTxTestDB(t *testing.T) *gorm.DB {
 	t.Helper()

@@ -5,10 +5,13 @@ import (
 	"context"
 	"mime/multipart"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/boxify/api-go/internal/domain"
+	"github.com/boxify/api-go/internal/infrastructure/queue"
 	"github.com/boxify/api-go/internal/models"
 	"github.com/boxify/api-go/internal/repository"
 	"github.com/boxify/api-go/internal/svc"
@@ -82,6 +85,9 @@ func (r *fakeDocumentRepository) pageRows(userID uuid.UUID) ([]*models.Document,
 			out = append(out, row)
 		}
 	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].FileName < out[j].FileName
+	})
 	total := r.listTotal
 	if total == 0 {
 		total = int64(len(out))
@@ -236,6 +242,25 @@ func (s *memoryDocumentStore) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
+type fakeDocumentTaskProducer struct {
+	tasks    []*domain.Task
+	parseErr error
+	closed   bool
+}
+
+func (p *fakeDocumentTaskProducer) Enqueue(ctx context.Context, task *domain.Task, opts ...queue.EnqueueOption) (*queue.TaskInfo, error) {
+	if p.parseErr != nil {
+		return nil, p.parseErr
+	}
+	p.tasks = append(p.tasks, task)
+	return &queue.TaskInfo{ID: "task-id", Name: task.Name, Queue: task.Queue}, nil
+}
+
+func (p *fakeDocumentTaskProducer) Close() error {
+	p.closed = true
+	return nil
+}
+
 func testFileHeader(t *testing.T, name string, content []byte) *multipart.FileHeader {
 	t.Helper()
 	var body bytes.Buffer
@@ -265,7 +290,8 @@ func TestUploadDocumentStoresFileAndCreatesDefaultKnowledgeBase(t *testing.T) {
 	docRepo := newFakeDocumentRepository()
 	kbRepo := newFakeDocumentKnowledgeBaseRepository()
 	store := newMemoryDocumentStore()
-	logic := NewUploadDocumentLogic(ctx, &svc.ServiceContext{DocumentRepo: docRepo, KnowledgeBaseRepo: kbRepo, Storage: store})
+	producer := &fakeDocumentTaskProducer{}
+	logic := NewUploadDocumentLogic(ctx, &svc.ServiceContext{DocumentRepo: docRepo, KnowledgeBaseRepo: kbRepo, Storage: store, TaskProducer: producer})
 
 	out, err := logic.UploadDocument(userID, &request.UploadDocumentRequest{
 		File: testFileHeader(t, " guide.md ", []byte("hello")),
@@ -285,14 +311,18 @@ func TestUploadDocumentStoresFileAndCreatesDefaultKnowledgeBase(t *testing.T) {
 	if docRepo.created.UserID != userID || docRepo.created.KBID == nil || *docRepo.created.KBID != kbRepo.created.ID {
 		t.Fatalf("created document owner/kb = %+v, want current user default kb", docRepo.created)
 	}
-	if docRepo.created.FileName != "guide.md" || docRepo.created.FileExt != ".md" || docRepo.created.FileSize != 5 || docRepo.created.Status != documentStatusPending {
+	if docRepo.created.FileName != "guide.md" || docRepo.created.FileExt != ".md" || docRepo.created.FileSize != 5 || docRepo.created.Status != domain.DocumentStatusPending {
 		t.Fatalf("created document = %+v, want normalized file metadata", docRepo.created)
 	}
 	if string(store.data[docRepo.created.FileKey]) != "hello" {
 		t.Fatalf("stored content = %q, want hello", string(store.data[docRepo.created.FileKey]))
 	}
-	if out.ID != docRepo.created.ID || out.FileName != "guide.md" || out.KBID == nil || *out.KBID != kbRepo.created.ID || out.Status != documentStatusPending {
+	if out.ID != docRepo.created.ID || out.FileName != "guide.md" || out.KBID == nil || *out.KBID != kbRepo.created.ID || out.Status != domain.DocumentStatusPending {
 		t.Fatalf("response = %+v, want created document response", out)
+	}
+	payload := parseDocumentPayloadFromTask(t, producer.tasks, 0)
+	if payload.UserID != userID || payload.DocumentID != docRepo.created.ID {
+		t.Fatalf("parse payload = %+v, want current user/document enqueued", payload)
 	}
 }
 
@@ -303,7 +333,7 @@ func TestUploadDocumentUsesExistingDefaultKnowledgeBase(t *testing.T) {
 	defaultKB := &models.KnowledgeBase{ID: uuid.New(), UserID: userID, Name: "默认知识库", IsDefault: true}
 	docRepo := newFakeDocumentRepository()
 	kbRepo := newFakeDocumentKnowledgeBaseRepository(defaultKB)
-	logic := NewUploadDocumentLogic(ctx, &svc.ServiceContext{DocumentRepo: docRepo, KnowledgeBaseRepo: kbRepo, Storage: newMemoryDocumentStore()})
+	logic := NewUploadDocumentLogic(ctx, &svc.ServiceContext{DocumentRepo: docRepo, KnowledgeBaseRepo: kbRepo, Storage: newMemoryDocumentStore(), TaskProducer: &fakeDocumentTaskProducer{}})
 
 	out, err := logic.UploadDocument(userID, &request.UploadDocumentRequest{File: testFileHeader(t, "doc.txt", []byte("hello"))})
 	if err != nil {
@@ -340,7 +370,7 @@ func TestUploadDocumentValidatesExplicitKnowledgeBase(t *testing.T) {
 	kbID := uuid.New()
 	docRepo := newFakeDocumentRepository()
 	kbRepo := newFakeDocumentKnowledgeBaseRepository(&models.KnowledgeBase{ID: kbID, UserID: userID, Name: "项目库"})
-	logic := NewUploadDocumentLogic(ctx, &svc.ServiceContext{DocumentRepo: docRepo, KnowledgeBaseRepo: kbRepo, Storage: newMemoryDocumentStore()})
+	logic := NewUploadDocumentLogic(ctx, &svc.ServiceContext{DocumentRepo: docRepo, KnowledgeBaseRepo: kbRepo, Storage: newMemoryDocumentStore(), TaskProducer: &fakeDocumentTaskProducer{}})
 
 	out, err := logic.UploadDocument(userID, &request.UploadDocumentRequest{
 		File: testFileHeader(t, "doc.txt", []byte("hello")),
@@ -357,6 +387,23 @@ func TestUploadDocumentValidatesExplicitKnowledgeBase(t *testing.T) {
 	}
 }
 
+func TestUploadDocumentMarksFailedWhenQueueEnqueueFails(t *testing.T) {
+	// 验证文档创建后如果解析任务入队失败，会把文档标记为 failed，避免长期停留在 pending。
+	ctx := context.Background()
+	userID := uuid.New()
+	docRepo := newFakeDocumentRepository()
+	kbRepo := newFakeDocumentKnowledgeBaseRepository(&models.KnowledgeBase{ID: uuid.New(), UserID: userID, Name: "默认知识库", IsDefault: true})
+	producer := &fakeDocumentTaskProducer{parseErr: xerr.Internal("queue down", nil)}
+	logic := NewUploadDocumentLogic(ctx, &svc.ServiceContext{DocumentRepo: docRepo, KnowledgeBaseRepo: kbRepo, Storage: newMemoryDocumentStore(), TaskProducer: producer})
+
+	if _, err := logic.UploadDocument(userID, &request.UploadDocumentRequest{File: testFileHeader(t, "doc.txt", []byte("hello"))}); err == nil {
+		t.Fatal("UploadDocument enqueue error = nil, want error")
+	}
+	if docRepo.created == nil || docRepo.created.Status != "failed" || docRepo.created.ErrorMsg == nil || !strings.Contains(*docRepo.created.ErrorMsg, "queue down") {
+		t.Fatalf("created document after enqueue failure = %+v, want failed with error message", docRepo.created)
+	}
+}
+
 func TestListDocumentsFiltersByKnowledgeBaseAndPaginates(t *testing.T) {
 	// 验证文档列表会把知识库、标签和分页参数下推给仓储，并返回仓储统计总数和标签响应。
 	ctx := context.Background()
@@ -364,8 +411,8 @@ func TestListDocumentsFiltersByKnowledgeBaseAndPaginates(t *testing.T) {
 	kbID := uuid.New()
 	now := time.Now()
 	repo := newFakeDocumentRepository(
-		&models.Document{ID: uuid.New(), UserID: userID, KBID: &kbID, FileName: "a.txt", FileExt: ".txt", Status: documentStatusPending, CreatedAt: now, Tags: []models.Tag{{Name: "重要"}}},
-		&models.Document{ID: uuid.New(), UserID: userID, KBID: &kbID, FileName: "b.txt", FileExt: ".txt", Status: documentStatusPending, CreatedAt: now},
+		&models.Document{ID: uuid.New(), UserID: userID, KBID: &kbID, FileName: "a.txt", FileExt: ".txt", Status: domain.DocumentStatusPending, CreatedAt: now, Tags: []models.Tag{{Name: "重要"}}},
+		&models.Document{ID: uuid.New(), UserID: userID, KBID: &kbID, FileName: "b.txt", FileExt: ".txt", Status: domain.DocumentStatusPending, CreatedAt: now},
 	)
 	repo.listTotal = 7
 	logic := NewListDocumentsLogic(ctx, &svc.ServiceContext{DocumentRepo: repo})
@@ -428,17 +475,37 @@ func TestReParseDocumentResetsStatusAndProgress(t *testing.T) {
 	errMsg := "boom"
 	row := &models.Document{ID: uuid.New(), UserID: userID, FileName: "a.txt", FileExt: ".txt", Status: "failed", Progress: 1, ErrorMsg: &errMsg}
 	repo := newFakeDocumentRepository(row)
+	producer := &fakeDocumentTaskProducer{}
 
-	out, err := NewReParseDocumentLogic(ctx, &svc.ServiceContext{DocumentRepo: repo}).ReParseDocument(userID, &request.UriDocumentIDRequest{DocumentID: row.ID.String()})
+	out, err := NewReParseDocumentLogic(ctx, &svc.ServiceContext{DocumentRepo: repo, TaskProducer: producer}).ReParseDocument(userID, &request.UriDocumentIDRequest{DocumentID: row.ID.String()})
 	if err != nil {
 		t.Fatalf("ReParseDocument error = %v", err)
 	}
-	if out.Status != documentStatusPending || out.Progress != 0 || out.ErrorMsg != nil {
+	if out.Status != domain.DocumentStatusPending || out.Progress != 0 || out.ErrorMsg != nil {
 		t.Fatalf("response = %+v, want reset parse state", out)
 	}
 	if strings.Join(repo.fields, ",") != "status,progress,error_msg" {
 		t.Fatalf("fields = %v, want status/progress/error_msg", repo.fields)
 	}
+	payload := parseDocumentPayloadFromTask(t, producer.tasks, 0)
+	if payload.UserID != userID || payload.DocumentID != row.ID {
+		t.Fatalf("parse payload = %+v, want current user/document enqueued", payload)
+	}
+}
+
+func parseDocumentPayloadFromTask(t *testing.T, tasks []*domain.Task, index int) *domain.ParseDocumentPayload {
+	t.Helper()
+	if len(tasks) <= index {
+		t.Fatalf("tasks = %+v, want task at index %d", tasks, index)
+	}
+	if tasks[index].Name != domain.TaskParseDocument {
+		t.Fatalf("task name = %q, want %q", tasks[index].Name, domain.TaskParseDocument)
+	}
+	payload, ok := tasks[index].Payload.(*domain.ParseDocumentPayload)
+	if !ok {
+		t.Fatalf("payload type = %T, want *domain.ParseDocumentPayload", tasks[index].Payload)
+	}
+	return payload
 }
 
 func TestDeleteDocumentDeletesStorageBestEffortAndMetadata(t *testing.T) {

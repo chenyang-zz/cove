@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/boxify/api-go/internal/domain"
 	"github.com/boxify/api-go/internal/infrastructure/storage"
 	knowledgebaselogic "github.com/boxify/api-go/internal/logic/knowledgebase"
 	"github.com/boxify/api-go/internal/mapper"
@@ -71,7 +72,7 @@ func (l *UploadDocumentLogic) UploadDocument(userID uuid.UUID, input *request.Up
 		FileSize:   fileInfo.Size,
 		FileKey:    fileKey,
 		SourceType: documentSourceFile,
-		Status:     documentStatusPending,
+		Status:     domain.DocumentStatusPending,
 	})
 	if err != nil {
 		return nil, err
@@ -84,8 +85,11 @@ func (l *UploadDocumentLogic) UploadDocument(userID uuid.UUID, input *request.Up
 		slog.Int64("file_size", row.FileSize),
 	)
 
-	// TODO: 推入文档解析任务队列
-	l.log.InfoContext(l.ctx, "文档解析任务暂未接入队列",
+	if err := enqueueParseDocumentTask(l.ctx, l.svcCtx.TaskProducer, userID, row.ID); err != nil {
+		markDocumentParseDispatchFailed(l.ctx, l.svcCtx.DocumentRepo, userID, row.ID, err)
+		return nil, err
+	}
+	l.log.InfoContext(l.ctx, "文档解析任务已入队",
 		slog.String("document_id", row.ID.String()),
 	)
 	return mapper.DocumentToResponse(row, nil), nil

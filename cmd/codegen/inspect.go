@@ -186,9 +186,16 @@ func RunDoctor(opts DoctorOptions) (Report, error) {
 	if err != nil {
 		return report, err
 	}
+	docRequestDTOs, err := scanDocDTOs(filepathJoin(root, "internal", "transport", "http", "request"))
+	if err != nil {
+		return report, err
+	}
 	for _, route := range routes {
 		if route.Directive.SSE && route.Directive.Event == "" {
 			report.AddDiagnostic("error", "route.sse.missing_event", fmt.Sprintf("%s.%s uses @sse but missing @event <GoType>", route.HandlerType, route.HandlerMethod), "add @event domain.AgentEvent or another SSE event type", "")
+		}
+		if !route.Directive.SSE && route.Directive.Output == "" {
+			report.AddDiagnostic("warn", "route.response.missing", fmt.Sprintf("%s.%s has no @response/@output declaration", route.HandlerType, route.HandlerMethod), "add @response ResponseType or intentionally document an empty response", "")
 		}
 		if route.Directive.Input != "" {
 			typeName := requestTypeName(route.Directive.Input)
@@ -199,6 +206,15 @@ func RunDoctor(opts DoctorOptions) (Report, error) {
 			}
 			if routeHasURIParam(route) && len(dto.EmbeddedURIOnly) > 1 {
 				report.AddDiagnostic("error", "route.uri.multiple_embedded", fmt.Sprintf("%s.%s input %s has multiple embedded URI-only DTOs", route.HandlerType, route.HandlerMethod, route.Directive.Input), "merge URI params into a single URI request DTO", "")
+			}
+			if routeHasURIParam(route) {
+				docDTO, ok := docRequestDTOs[typeName]
+				if ok {
+					missing := missingURIParams(route, docDTO, docRequestDTOs)
+					if len(missing) > 0 {
+						report.AddDiagnostic("error", "route.uri.missing_field", fmt.Sprintf("%s.%s path params missing uri fields: %s", route.HandlerType, route.HandlerMethod, strings.Join(missing, ", ")), "add matching `uri` tags to the request DTO", "")
+					}
+				}
 			}
 		}
 	}
@@ -220,4 +236,35 @@ func RunDoctor(opts DoctorOptions) (Report, error) {
 		}
 	}
 	return report, nil
+}
+
+func filepathJoin(elem ...string) string {
+	return strings.Join(elem, "/")
+}
+
+func missingURIParams(route Route, dto docDTO, all map[string]docDTO) []string {
+	declared := map[string]struct{}{}
+	for _, field := range flattenDocFields(dto, all, map[string]bool{}) {
+		if field.URIName != "" {
+			declared[field.URIName] = struct{}{}
+		}
+	}
+	var missing []string
+	for _, name := range routeURIParamNames(route.Path) {
+		if _, ok := declared[name]; !ok {
+			missing = append(missing, name)
+		}
+	}
+	sort.Strings(missing)
+	return missing
+}
+
+func routeURIParamNames(path string) []string {
+	var out []string
+	for _, segment := range strings.Split(path, "/") {
+		if strings.HasPrefix(segment, ":") && len(segment) > 1 {
+			out = append(out, strings.TrimPrefix(segment, ":"))
+		}
+	}
+	return out
 }

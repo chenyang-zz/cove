@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/boxify/api-go/internal/domain"
 	"github.com/boxify/api-go/internal/mapper"
 	"github.com/boxify/api-go/internal/models"
 	"github.com/boxify/api-go/internal/observability/xlog"
@@ -37,7 +38,7 @@ func (l *ReParseDocumentLogic) ReParseDocument(userID uuid.UUID, input *request.
 		return nil, err
 	}
 	row, err := l.svcCtx.DocumentRepo.UpdateFields(l.ctx, userID, documentID, &models.Document{
-		Status:   documentStatusPending,
+		Status:   domain.DocumentStatusPending,
 		Progress: 0,
 		ErrorMsg: nil,
 	}, repository.NewDocumentUpdateFields().Status().Progress().ErrorMsg())
@@ -48,7 +49,11 @@ func (l *ReParseDocumentLogic) ReParseDocument(userID uuid.UUID, input *request.
 		slog.String("user_id", userID.String()),
 		slog.String("document_id", documentID.String()),
 	)
-	l.log.InfoContext(l.ctx, "文档解析任务暂未接入队列",
+	if err := enqueueParseDocumentTask(l.ctx, l.svcCtx.TaskProducer, userID, documentID); err != nil {
+		markDocumentParseDispatchFailed(l.ctx, l.svcCtx.DocumentRepo, userID, documentID, err)
+		return nil, err
+	}
+	l.log.InfoContext(l.ctx, "文档解析任务已入队",
 		slog.String("document_id", documentID.String()),
 	)
 	return mapper.DocumentToResponse(row, nil), nil

@@ -2,28 +2,63 @@ package queue
 
 import (
 	"context"
-	"encoding/json"
 
-	"github.com/hibiken/asynq"
+	"github.com/boxify/api-go/internal/domain"
 )
 
-type Producer struct {
-	client *asynq.Client
+type EnqueueOptions struct {
+	Queue    domain.QueueName
+	MaxRetry *int
 }
 
-func NewProducer(redisAddr string) *Producer {
-	return &Producer{client: asynq.NewClient(asynq.RedisClientOpt{Addr: redisAddr})}
+type EnqueueOption func(*EnqueueOptions)
+
+type TaskInfo struct {
+	ID    string
+	Name  domain.TaskName
+	Queue domain.QueueName
 }
 
-func (p *Producer) Enqueue(ctx context.Context, taskName string, payload any, opts ...asynq.Option) (*asynq.TaskInfo, error) {
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
+type Producer interface {
+	Enqueue(ctx context.Context, task *domain.Task, opts ...EnqueueOption) (*TaskInfo, error)
+	Close() error
+}
+
+type Handler interface {
+	HandleTask(ctx context.Context, task *domain.Task) error
+}
+
+type HandlerFunc func(ctx context.Context, task *domain.Task) error
+
+func (f HandlerFunc) HandleTask(ctx context.Context, task *domain.Task) error {
+	return f(ctx, task)
+}
+
+type Router interface {
+	Handle(name domain.TaskName, handler Handler)
+}
+
+func WithQueue(queue domain.QueueName) EnqueueOption {
+	return func(opts *EnqueueOptions) {
+		opts.Queue = queue
 	}
-	task := asynq.NewTask(taskName, data)
-	return p.client.EnqueueContext(ctx, task, opts...)
 }
 
-func (p *Producer) Close() error {
-	return p.client.Close()
+func WithMaxRetry(maxRetry int) EnqueueOption {
+	return func(opts *EnqueueOptions) {
+		opts.MaxRetry = &maxRetry
+	}
+}
+
+func NewEnqueueOptions(task *domain.Task, opts ...EnqueueOption) *EnqueueOptions {
+	options := &EnqueueOptions{}
+	if task != nil {
+		options.Queue = task.Queue
+	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(options)
+		}
+	}
+	return options
 }

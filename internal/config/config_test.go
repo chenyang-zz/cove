@@ -52,6 +52,12 @@ neo4j:
 jwt:
   secret: yaml-secret
   access_token_ttl: 2h
+docs:
+  enabled: true
+  path: /docs
+  spec_path: /docs/openapi.json
+  title: YAML API
+  version: 1.2.3
 secret_key: 12345678901234567890123456789012
 storage:
   backend: cos
@@ -98,6 +104,9 @@ llm:
 	if cfg.JWT.Secret != "yaml-secret" || cfg.JWT.AccessTokenTTL != "2h" {
 		t.Fatalf("cfg jwt = %#v", cfg.JWT)
 	}
+	if !cfg.Docs.Enabled || cfg.Docs.Path != "/docs" || cfg.Docs.SpecPath != "/docs/openapi.json" || cfg.Docs.Title != "YAML API" || cfg.Docs.Version != "1.2.3" {
+		t.Fatalf("cfg docs = %#v", cfg.Docs)
+	}
 }
 
 func TestLoadFileEnvOverridesYAML(t *testing.T) {
@@ -119,6 +128,11 @@ func TestLoadFileEnvOverridesYAML(t *testing.T) {
 	t.Setenv("NEO4J_DATABASE", "env-db")
 	t.Setenv("JWT_SECRET", "env-jwt")
 	t.Setenv("JWT_ACCESS_TOKEN_TTL", "30m")
+	t.Setenv("DOCS_ENABLED", "true")
+	t.Setenv("DOCS_PATH", "/env/docs")
+	t.Setenv("DOCS_SPEC_PATH", "/env/docs/openapi.json")
+	t.Setenv("DOCS_TITLE", "Env API")
+	t.Setenv("DOCS_VERSION", "9.9.9")
 	t.Setenv("SECRET_KEY", "abcdefghijklmnopqrstuvwxyz123456")
 	t.Setenv("STORAGE_BACKEND", "env-storage")
 	t.Setenv("STORAGE_DIR", "/env/storage")
@@ -149,6 +163,12 @@ neo4j:
   database: yaml-db
 jwt:
   secret: yaml-jwt
+docs:
+  enabled: false
+  path: /yaml/docs
+  spec_path: /yaml/docs/openapi.json
+  title: YAML API
+  version: 0.1.0
 llm:
   provider: openai
   model: yaml-model
@@ -179,6 +199,32 @@ llm:
 	}
 	if cfg.JWT.Secret != "env-jwt" || cfg.JWT.AccessTokenTTL != "30m" || cfg.LLM.APIKey != "sk-env" {
 		t.Fatalf("env override secrets failed: %#v", cfg)
+	}
+	if !cfg.Docs.Enabled || cfg.Docs.Path != "/env/docs" || cfg.Docs.SpecPath != "/env/docs/openapi.json" || cfg.Docs.Title != "Env API" || cfg.Docs.Version != "9.9.9" {
+		t.Fatalf("env override docs failed: %#v", cfg.Docs)
+	}
+}
+
+func TestLoadFileDocsDefaultDependsOnAppEnv(t *testing.T) {
+	// 验证 docs.enabled 未显式配置时，开发环境默认开启，生产环境默认关闭。
+	dev, err := config.LoadFile(filepath.Join(t.TempDir(), "missing.yml"))
+	if err != nil {
+		t.Fatalf("LoadFile dev error = %v", err)
+	}
+	if !dev.Docs.Enabled {
+		t.Fatalf("dev docs enabled = false, want true")
+	}
+
+	path := writeConfig(t, `
+app:
+  env: production
+`)
+	prod, err := config.LoadFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile prod error = %v", err)
+	}
+	if prod.Docs.Enabled {
+		t.Fatalf("prod docs enabled = true, want false")
 	}
 }
 

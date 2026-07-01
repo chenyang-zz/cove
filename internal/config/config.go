@@ -13,6 +13,7 @@ const defaultConfigPath = "configs/config.yml"
 type Config struct {
 	App           AppConfig           `yaml:"app"`
 	HTTP          HTTPConfig          `yaml:"http"`
+	Docs          DocsConfig          `yaml:"docs"`
 	Database      DatabaseConfig      `yaml:"database"`
 	Redis         RedisConfig         `yaml:"redis"`
 	Elasticsearch ElasticsearchConfig `yaml:"elasticsearch"`
@@ -33,6 +34,14 @@ type AppConfig struct {
 type HTTPConfig struct {
 	Host string `yaml:"host"`
 	Port int    `yaml:"port"`
+}
+
+type DocsConfig struct {
+	Enabled  bool   `yaml:"enabled"`
+	Path     string `yaml:"path"`
+	SpecPath string `yaml:"spec_path"`
+	Title    string `yaml:"title"`
+	Version  string `yaml:"version"`
 }
 
 type DatabaseConfig struct {
@@ -117,10 +126,12 @@ func Load() Config {
 
 func LoadFile(path string) (Config, error) {
 	cfg := defaultConfig()
+	docsEnabledConfigured := false
 	if path != "" {
 		data, err := os.ReadFile(path)
 		switch {
 		case err == nil:
+			docsEnabledConfigured = yamlHasDocsEnabled(data)
 			if err := yaml.Unmarshal(data, &cfg); err != nil {
 				return Config{}, fmt.Errorf("parse yaml: %w", err)
 			}
@@ -129,7 +140,11 @@ func LoadFile(path string) (Config, error) {
 			return Config{}, fmt.Errorf("read yaml: %w", err)
 		}
 	}
+	docsEnabledEnvConfigured := os.Getenv("DOCS_ENABLED") != ""
 	applyEnv(&cfg)
+	if !docsEnabledConfigured && !docsEnabledEnvConfigured {
+		cfg.Docs.Enabled = cfg.App.Env == "development"
+	}
 	return cfg, nil
 }
 
@@ -141,6 +156,7 @@ func defaultConfig() Config {
 	return Config{
 		App:           AppConfig{Env: "development"},
 		HTTP:          HTTPConfig{Host: "0.0.0.0", Port: 8000},
+		Docs:          DocsConfig{Path: "/docs", SpecPath: "/docs/openapi.json", Title: "Boxify API", Version: "0.1.0"},
 		Database:      DatabaseConfig{URL: "postgres://comet:comet@localhost:5432/comet?sslmode=disable"},
 		Redis:         RedisConfig{Addr: "localhost:6379"},
 		Elasticsearch: ElasticsearchConfig{URL: "http://localhost:9200"},
@@ -168,6 +184,11 @@ func applyEnv(cfg *Config) {
 	cfg.App.Env = env("APP_ENV", cfg.App.Env)
 	cfg.HTTP.Host = env("APP_HOST", cfg.HTTP.Host)
 	cfg.HTTP.Port = envInt("APP_PORT", cfg.HTTP.Port)
+	cfg.Docs.Enabled = envBool("DOCS_ENABLED", cfg.Docs.Enabled)
+	cfg.Docs.Path = env("DOCS_PATH", cfg.Docs.Path)
+	cfg.Docs.SpecPath = env("DOCS_SPEC_PATH", cfg.Docs.SpecPath)
+	cfg.Docs.Title = env("DOCS_TITLE", cfg.Docs.Title)
+	cfg.Docs.Version = env("DOCS_VERSION", cfg.Docs.Version)
 	cfg.Database.URL = env("DATABASE_URL", cfg.Database.URL)
 	cfg.Redis.Addr = env("REDIS_ADDR", cfg.Redis.Addr)
 	cfg.Redis.Username = env("REDIS_USERNAME", cfg.Redis.Username)
@@ -215,4 +236,29 @@ func envInt(key string, fallback int) int {
 		return fallback
 	}
 	return parsed
+}
+
+func envBool(key string, fallback bool) bool {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func yamlHasDocsEnabled(data []byte) bool {
+	var raw map[string]any
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return false
+	}
+	docs, ok := raw["docs"].(map[string]any)
+	if !ok {
+		return false
+	}
+	_, ok = docs["enabled"]
+	return ok
 }

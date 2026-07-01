@@ -16,6 +16,8 @@ import (
 	dbpostgres "github.com/boxify/api-go/internal/infrastructure/db/postgres"
 	infraredis "github.com/boxify/api-go/internal/infrastructure/db/redis"
 	infrallm "github.com/boxify/api-go/internal/infrastructure/llm"
+	"github.com/boxify/api-go/internal/infrastructure/queue"
+	queueredis "github.com/boxify/api-go/internal/infrastructure/queue/redis"
 	"github.com/boxify/api-go/internal/infrastructure/realtime"
 	realtimeredis "github.com/boxify/api-go/internal/infrastructure/realtime/redis"
 	"github.com/boxify/api-go/internal/infrastructure/security"
@@ -34,6 +36,7 @@ type ServiceContext struct {
 	Neo4j         *dbneo4j.Client
 	Redis         *infraredis.Client
 	Realtime      realtime.Broker
+	TaskProducer  queue.Producer
 	Elasticsearch *infraes.Client
 	Storage       storage.Store
 	URLSigner     storage.URLSigner
@@ -104,6 +107,7 @@ func New(ctx context.Context, cfg config.Config) (*ServiceContext, error) {
 	}
 	svcCtx.Redis = redisClient
 	svcCtx.Realtime = BuildRealtime(redisClient)
+	svcCtx.TaskProducer = BuildTaskProducer(cfg.Redis)
 
 	esClient, err := infraes.NewClient(infraes.Config{
 		URL:      cfg.Elasticsearch.URL,
@@ -193,6 +197,11 @@ func (s *ServiceContext) Close(ctx context.Context) error {
 				errs = append(errs, err)
 			}
 		}
+		if s.TaskProducer != nil {
+			if err := s.TaskProducer.Close(); err != nil {
+				errs = append(errs, xerr.Wrapf(err, "关闭任务队列 producer 失败"))
+			}
+		}
 		if s.GormDB != nil {
 			sqlDB, err := s.GormDB.DB()
 			if err != nil {
@@ -211,6 +220,18 @@ func BuildRealtime(redisClient *infraredis.Client) realtime.Broker {
 		return nil
 	}
 	return realtimeredis.New(redisClient.Raw())
+}
+
+func BuildTaskProducer(cfg config.RedisConfig) queue.Producer {
+	if cfg.Addr == "" {
+		return nil
+	}
+	return queueredis.NewProducer(queueredis.Config{
+		Addr:     cfg.Addr,
+		Username: cfg.Username,
+		Password: cfg.Password,
+		DB:       cfg.DB,
+	})
 }
 
 func BuildLLMManager() *corellm.Manager {

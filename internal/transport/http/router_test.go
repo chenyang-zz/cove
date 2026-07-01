@@ -12,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/boxify/api-go/internal/config"
 	"github.com/boxify/api-go/internal/domain"
+	"github.com/boxify/api-go/internal/infrastructure/queue"
 	"github.com/boxify/api-go/internal/infrastructure/realtime"
 	"github.com/boxify/api-go/internal/infrastructure/security"
 	"github.com/boxify/api-go/internal/models"
@@ -25,11 +27,26 @@ import (
 
 func newTestRouter(t *testing.T, enableDebugPanicRoute ...bool) http.Handler {
 	t.Helper()
+	return newTestRouterWithConfig(t, config.Config{
+		App: config.AppConfig{Env: "test"},
+		Docs: config.DocsConfig{
+			Enabled:  false,
+			Path:     "/docs",
+			SpecPath: "/docs/openapi.json",
+			Title:    "Test API",
+			Version:  "test",
+		},
+	}, enableDebugPanicRoute...)
+}
+
+func newTestRouterWithConfig(t *testing.T, cfg config.Config, enableDebugPanicRoute ...bool) http.Handler {
+	t.Helper()
 	cipher, err := security.NewSecretCipher("0123456789abcdef0123456789abcdef")
 	if err != nil {
 		t.Fatalf("new cipher: %v", err)
 	}
 	svcCtx := &svc.ServiceContext{
+		Config:            cfg,
 		UserRepo:          newTestUserRepository(),
 		RefreshTokenRepo:  newTestRefreshTokenRepository(),
 		ModelConfigRepo:   &testModelConfigRepository{},
@@ -40,6 +57,7 @@ func newTestRouter(t *testing.T, enableDebugPanicRoute ...bool) http.Handler {
 		ImageRepo:         newTestImageRepository(),
 		Storage:           newTestDocumentStore(),
 		Realtime:          testRealtimeBroker{},
+		TaskProducer:      testTaskProducer{},
 		SecretCipher:      cipher,
 		TokenIssuer:       security.NewTokenIssuer("test-secret", time.Hour),
 	}
@@ -75,6 +93,16 @@ func (s testRealtimeSubscription) Events() <-chan domain.Event {
 }
 
 func (s testRealtimeSubscription) Close(ctx context.Context) error {
+	return nil
+}
+
+type testTaskProducer struct{}
+
+func (testTaskProducer) Enqueue(ctx context.Context, task *domain.Task, opts ...queue.EnqueueOption) (*queue.TaskInfo, error) {
+	return &queue.TaskInfo{ID: "task-id", Name: task.Name, Queue: task.Queue}, nil
+}
+
+func (testTaskProducer) Close() error {
 	return nil
 }
 
@@ -739,6 +767,66 @@ func TestRouterRequiresExplicitDependencies(t *testing.T) {
 		}
 	}()
 	_ = httptransport.NewRouter(httptransport.Dependencies{})
+}
+
+func TestRouterMountsDocsWhenEnabled(t *testing.T) {
+	// 验证配置开启时，router 会同时暴露 OpenAPI JSON 和 Swagger UI 页面。
+	router := newTestRouterWithConfig(t, config.Config{
+		App: config.AppConfig{Env: "development"},
+		Docs: config.DocsConfig{
+			Enabled:  true,
+			Path:     "/docs",
+			SpecPath: "/docs/openapi.json",
+			Title:    "Test API",
+			Version:  "test",
+		},
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/docs/openapi.json", nil)
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("spec status = %d, want %d; body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := w.Header().Get("Content-Type"); !strings.Contains(got, "application/json") {
+		t.Fatalf("spec content-type = %q, want application/json", got)
+	}
+	if !strings.Contains(w.Body.String(), `"openapi"`) {
+		t.Fatalf("spec body = %s, want openapi json", w.Body.String())
+	}
+
+	ui := httptest.NewRecorder()
+	uiReq := httptest.NewRequest(http.MethodGet, "/docs", nil)
+	router.ServeHTTP(ui, uiReq)
+	if ui.Code != http.StatusFound || ui.Header().Get("Location") != "/docs/index.html" {
+		t.Fatalf("ui redirect status/location = %d/%q, want 302 /docs/index.html", ui.Code, ui.Header().Get("Location"))
+	}
+
+	index := httptest.NewRecorder()
+	indexReq := httptest.NewRequest(http.MethodGet, "/docs/index.html", nil)
+	router.ServeHTTP(index, indexReq)
+	if index.Code != http.StatusOK {
+		t.Fatalf("ui status = %d, want %d; body=%s", index.Code, http.StatusOK, index.Body.String())
+	}
+}
+
+func TestRouterDoesNotMountDocsWhenDisabled(t *testing.T) {
+	// 验证生产或显式关闭场景不会暴露接口文档路由。
+	router := newTestRouterWithConfig(t, config.Config{
+		App: config.AppConfig{Env: "production"},
+		Docs: config.DocsConfig{
+			Enabled:  false,
+			Path:     "/docs",
+			SpecPath: "/docs/openapi.json",
+		},
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/docs/openapi.json", nil)
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
+	}
 }
 
 func TestProtectedRouteRequiresBearerToken(t *testing.T) {

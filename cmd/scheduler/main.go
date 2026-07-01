@@ -5,14 +5,26 @@ import (
 	"os"
 
 	"github.com/boxify/api-go/internal/config"
-	"github.com/boxify/api-go/internal/infrastructure/queue"
+	"github.com/boxify/api-go/internal/domain"
+	queueredis "github.com/boxify/api-go/internal/infrastructure/queue/redis"
+	"github.com/boxify/api-go/internal/observability/xlog"
 	"github.com/hibiken/asynq"
 )
 
 func main() {
 	cfg := config.Load()
-	scheduler := asynq.NewScheduler(asynq.RedisClientOpt{Addr: cfg.Redis.Addr}, nil)
-	if _, err := scheduler.Register("@daily", asynq.NewTask(queue.TaskMemoryConsolidate, nil)); err != nil {
+	xlog.Configure(xlog.Config{
+		Env:   cfg.App.Env,
+		Level: slog.LevelInfo,
+		Color: true,
+	})
+	scheduler := asynq.NewScheduler(queueredis.ClientOpt(queueredis.Config{
+		Addr:     cfg.Redis.Addr,
+		Username: cfg.Redis.Username,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+	}), nil)
+	if _, err := scheduler.Register("@daily", asynq.NewTask(string(domain.TaskMemoryConsolidate), nil)); err != nil {
 		slog.Error("register scheduled task", "error", err)
 		os.Exit(1)
 	}

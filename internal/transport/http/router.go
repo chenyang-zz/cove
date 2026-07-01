@@ -1,8 +1,13 @@
 package http
 
 import (
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/boxify/api-go/internal/config"
 	"github.com/boxify/api-go/internal/observability/xlog"
 	"github.com/boxify/api-go/internal/svc"
 	"github.com/boxify/api-go/internal/transport/http/handler"
@@ -11,6 +16,8 @@ import (
 	"github.com/boxify/api-go/internal/transport/http/routes"
 	"github.com/boxify/api-go/internal/xerr"
 	"github.com/gin-gonic/gin"
+	swaggerfiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 type Dependencies struct {
@@ -29,6 +36,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	r.NoRoute(func(c *gin.Context) {
 		response.FromError(c, xerr.NotFound("route not found"))
 	})
+	registerDocsRoutes(r, deps.Svc.Config.Docs)
 
 	health := handler.NewHealthHandler(deps.Svc)
 	auth := handler.NewAuthHandler(deps.Svc)
@@ -58,6 +66,38 @@ func NewRouter(deps Dependencies) *gin.Engine {
 		routes.RegisterDebugRoutes(api)
 	}
 	return r
+}
+
+func registerDocsRoutes(r *gin.Engine, cfg config.DocsConfig) {
+	if !cfg.Enabled {
+		return
+	}
+	if cfg.Path == "" {
+		cfg.Path = "/api/docs"
+	}
+	if cfg.SpecPath == "" {
+		cfg.SpecPath = strings.TrimRight(cfg.Path, "/") + "/openapi.json"
+	}
+	docsPath := strings.TrimRight(cfg.Path, "/")
+	ui := ginSwagger.WrapHandler(swaggerfiles.Handler, ginSwagger.URL(cfg.SpecPath))
+	r.GET(docsPath, func(c *gin.Context) {
+		c.Redirect(http.StatusFound, docsPath+"/index.html")
+	})
+	r.GET(docsPath+"/*any", func(c *gin.Context) {
+		if strings.TrimPrefix(c.Param("any"), "/") == "openapi.json" {
+			writeOpenAPISpec(c)
+			return
+		}
+		ui(c)
+	})
+}
+
+func writeOpenAPISpec(c *gin.Context) {
+	data, err := os.ReadFile(filepath.Join("docs", "openapi.json"))
+	if err != nil {
+		data = []byte(`{"openapi":"3.0.3","info":{"title":"Boxify API","version":"0.1.0"},"paths":{}}`)
+	}
+	c.Data(http.StatusOK, "application/json; charset=utf-8", data)
 }
 
 func cors() gin.HandlerFunc {

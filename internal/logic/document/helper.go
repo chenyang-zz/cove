@@ -1,17 +1,21 @@
 package document
 
 import (
+	"context"
 	"strings"
 
+	"github.com/boxify/api-go/internal/domain"
+	"github.com/boxify/api-go/internal/infrastructure/queue"
+	"github.com/boxify/api-go/internal/models"
+	"github.com/boxify/api-go/internal/repository"
 	"github.com/boxify/api-go/internal/xerr"
 	"github.com/google/uuid"
 )
 
 const (
-	documentStatusPending = "pending"
-	documentSourceFile    = "file"
-	maxDocumentFileSize   = 50 * 1024 * 1024
-	previewMaxChars       = 80000
+	documentSourceFile  = "file"
+	maxDocumentFileSize = 50 * 1024 * 1024
+	previewMaxChars     = 80000
 )
 
 var supportedDocumentExts = map[string]struct{}{
@@ -90,4 +94,31 @@ func truncatePreview(text string) (string, bool) {
 		return text, false
 	}
 	return string(runes[:previewMaxChars]), true
+}
+
+func enqueueParseDocumentTask(ctx context.Context, producer queue.Producer, userID uuid.UUID, documentID uuid.UUID) error {
+	if producer == nil {
+		return xerr.Internal("任务队列未初始化", nil)
+	}
+	task, err := domain.NewParseDocumentTask(userID, documentID)
+	if err != nil {
+		return xerr.Wrapf(err, "创建文档解析任务失败")
+	}
+	_, err = producer.Enqueue(ctx, task)
+	if err != nil {
+		return xerr.Wrapf(err, "提交文档解析任务失败")
+	}
+	return nil
+}
+
+func markDocumentParseDispatchFailed(ctx context.Context, repo repository.DocumentRepository, userID uuid.UUID, documentID uuid.UUID, cause error) {
+	if repo == nil || cause == nil {
+		return
+	}
+	message := cause.Error()
+	_, _ = repo.UpdateFields(ctx, userID, documentID, &models.Document{
+		Status:   domain.DocumentStatusFailed,
+		Progress: 0,
+		ErrorMsg: &message,
+	}, repository.NewDocumentUpdateFields().Status().Progress().ErrorMsg())
 }

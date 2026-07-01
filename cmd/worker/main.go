@@ -6,28 +6,48 @@ import (
 	"os"
 
 	"github.com/boxify/api-go/internal/config"
-	"github.com/boxify/api-go/internal/infrastructure/queue"
+	"github.com/boxify/api-go/internal/domain"
+	queueredis "github.com/boxify/api-go/internal/infrastructure/queue/redis"
+	"github.com/boxify/api-go/internal/observability/xlog"
+	"github.com/boxify/api-go/internal/svc"
+	workertasks "github.com/boxify/api-go/internal/worker/tasks"
 	"github.com/hibiken/asynq"
 )
 
 func main() {
+	ctx := context.Background()
 	cfg := config.Load()
-	mux := asynq.NewServeMux()
-	for _, name := range queue.TaskNames() {
-		taskName := name
-		mux.HandleFunc(taskName, func(ctx context.Context, task *asynq.Task) error {
-			slog.Info("task received", "type", task.Type())
-			return nil
-		})
+	xlog.Configure(xlog.Config{
+		Env:   cfg.App.Env,
+		Level: slog.LevelInfo,
+		Color: true,
+	})
+	svcCtx, err := svc.New(ctx, cfg)
+	if err != nil {
+		slog.Error("init service context", "error", err)
+		os.Exit(1)
 	}
+	defer func() {
+		if err := svcCtx.Close(context.Background()); err != nil {
+			slog.Error("close service context", "error", err)
+		}
+	}()
+
+	mux := asynq.NewServeMux()
+	workertasks.NewRegistry(svcCtx).Register(queueredis.NewRouter(mux))
 	server := asynq.NewServer(
-		asynq.RedisClientOpt{Addr: cfg.Redis.Addr},
+		queueredis.ClientOpt(queueredis.Config{
+			Addr:     cfg.Redis.Addr,
+			Username: cfg.Redis.Username,
+			Password: cfg.Redis.Password,
+			DB:       cfg.Redis.DB,
+		}),
 		asynq.Config{Queues: map[string]int{
-			queue.QueueDefault:  5,
-			queue.QueueParse:    3,
-			queue.QueueMemory:   3,
-			queue.QueueResearch: 1,
-			queue.QueueBeat:     1,
+			string(domain.QueueDefault):  5,
+			string(domain.QueueParse):    3,
+			string(domain.QueueMemory):   3,
+			string(domain.QueueResearch): 1,
+			string(domain.QueueBeat):     1,
 		}},
 	)
 	if err := server.Run(mux); err != nil {

@@ -23,6 +23,8 @@ func main() {
 		_, err = runRouteCommand(os.Args[2:])
 	case "repository":
 		_, err = runRepositoryCommand(os.Args[2:])
+	case "docs":
+		_, err = runDocsCommand(os.Args[2:])
 	case "doctor":
 		_, err = runDoctorCommand(os.Args[2:])
 	case "help", "-h", "--help":
@@ -130,6 +132,44 @@ func runRepositoryCommand(args []string) (Report, error) {
 	return report, nil
 }
 
+func runDocsCommand(args []string) (Report, error) {
+	fs := flag.NewFlagSet("docs", flag.ContinueOnError)
+	root := fs.String("root", ".", "project root")
+	output := fs.String("output", defaultDocsOutput, "OpenAPI JSON output path")
+	title := fs.String("title", "Boxify API", "OpenAPI info.title")
+	version := fs.String("version", "0.1.0", "OpenAPI info.version")
+	dryRun := fs.Bool("dry-run", false, "preview generated files without writing")
+	check := fs.Bool("check", false, "fail if generated files are out of date")
+	verbose := fs.Bool("verbose", false, "print scan diagnostics")
+	format := fs.String("format", "text", "output format: text or json")
+	noColor := fs.Bool("no-color", false, "disable colored output")
+	if err := fs.Parse(args); err != nil {
+		return Report{}, err
+	}
+	if *dryRun && *check {
+		return Report{}, fmt.Errorf("--dry-run and --check are mutually exclusive")
+	}
+	report, err := GenerateDocs(DocsOptions{
+		Root:    *root,
+		Output:  *output,
+		Title:   *title,
+		Version: *version,
+		DryRun:  *dryRun,
+		Check:   *check,
+		Verbose: *verbose,
+	})
+	if err != nil {
+		return report, err
+	}
+	if err := printReportWithFormat(os.Stdout, report, ReportFormat(*format), !*noColor); err != nil {
+		return report, err
+	}
+	if *check && report.Changed() {
+		return report, ErrCheckFailed
+	}
+	return report, nil
+}
+
 func runDoctorCommand(args []string) (Report, error) {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	root := fs.String("root", ".", "project root")
@@ -153,6 +193,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "usage:")
 	fmt.Fprintln(w, "  codegen route [-root .] [--dry-run|--check] [--list] [--verbose] [--format text|json] [--no-color]")
 	fmt.Fprintln(w, "  codegen repository -model Model [-label 名称] [-scope local_column:table.column:user_column] [-root .] [--dry-run|--check] [--list-models] [--verbose] [--format text|json] [--no-color]")
+	fmt.Fprintln(w, "  codegen docs [-root .] [--output docs/openapi.json] [--title title] [--version version] [--dry-run|--check] [--verbose] [--format text|json] [--no-color]")
 	fmt.Fprintln(w, "  codegen doctor [-root .] [--verbose] [--format text|json] [--no-color]")
 }
 

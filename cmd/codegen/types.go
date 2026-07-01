@@ -127,12 +127,23 @@ type RouteOptions struct {
 	Verbose bool
 }
 
+type DocsOptions struct {
+	Root    string
+	Output  string
+	Title   string
+	Version string
+	DryRun  bool
+	Check   bool
+	Verbose bool
+}
+
 type Directive struct {
 	Input       string
 	Output      string
 	Event       string
 	Description []string
 	Summary     string
+	Tag         string
 	Auth        bool
 	UserID      bool
 	SSE         bool

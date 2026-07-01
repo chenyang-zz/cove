@@ -14,6 +14,10 @@ go run ./cmd/codegen repository -model Conversation -label 会话
 go run ./cmd/codegen repository -model Message -label 消息 -scope conversation_id:conversations.id:user_id
 go run ./cmd/codegen repository --list-models
 
+go run ./cmd/codegen docs
+go run ./cmd/codegen docs --check
+go run ./cmd/codegen docs --format json
+
 go run ./cmd/codegen doctor
 go run ./cmd/codegen doctor --format json
 ```
@@ -26,6 +30,8 @@ make gen-route DRY_RUN=1
 make gen-route CHECK=1 FORMAT=json
 make gen-repository MODEL=Conversation LABEL=会话
 make gen-repository MODEL=Message LABEL=消息 SCOPE=conversation_id:conversations.id:user_id
+make gen-docs
+make gen-docs CHECK=1 FORMAT=json
 ```
 
 ## Route 注释协议
@@ -53,6 +59,27 @@ chatRoutes.POST("/stream", chat.ChatStream)
 ```
 
 旧协议 `routegen: ...` 继续兼容。
+
+## OpenAPI 文档
+
+`codegen docs` 会复用 route 注释协议和 request/response DTO tag 生成 `docs/openapi.json`。文档使用 OpenAPI 3.0.3；运行时仍通过 `/docs/openapi.json` 暴露该 spec。
+
+- `@auth(user_id)` 生成 BearerAuth。
+- `@summary`、`@description`、`@tag` 生成 operation 元信息。
+- `@input` 解析 `uri/form/query/json/binding` tag。
+- `@response` 生成统一 `{code,message,data}` envelope。
+- `@sse + @event` 生成 `text/event-stream` 响应。
+
+Gin 运行时通过配置开启在线文档页，默认开发环境开启，生产环境关闭：
+
+```yaml
+docs:
+  enabled: true
+  path: /docs
+  spec_path: /docs/openapi.json
+  title: Boxify API
+  version: 0.1.0
+```
 
 ## Repository Scope
 
