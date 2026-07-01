@@ -1,0 +1,7 @@
+type {{.HandlerType}} struct {
+	svc *svc.ServiceContext
+}
+
+func New{{.HandlerType}}(svcCtx *svc.ServiceContext) {{.HandlerType}} {
+	return {{.HandlerType}}{svc: svcCtx}
+}

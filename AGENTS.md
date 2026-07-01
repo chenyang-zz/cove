@@ -49,3 +49,7 @@ This project is indexed by GitNexus as **boxify-api-go** (5405 symbols, 21214 re
 ## Generated Code
 
 - For generated code, key steps must include Chinese comments explaining what they do.
+
+## Go Style
+
+- Prefer using pointers wherever pointers can reasonably be used.

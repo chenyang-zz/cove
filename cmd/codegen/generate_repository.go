@@ -16,13 +16,19 @@ func GenerateRepository(opts RepositoryOptions) (Report, error) {
 	if opts.Root == "" {
 		opts.Root = "."
 	}
-	report := Report{Root: opts.Root}
+	report := Report{Root: opts.Root, Command: "repository", Mode: generationMode(opts.DryRun, opts.Check)}
+	if opts.DryRun && opts.Check {
+		return report, fmt.Errorf("--dry-run and --check are mutually exclusive")
+	}
 	if strings.TrimSpace(opts.Model) == "" {
 		return report, fmt.Errorf("codegen repository: -model is required")
 	}
 	models, err := scanModels(opts.Root)
 	if err != nil {
 		return report, err
+	}
+	if opts.Verbose {
+		report.AddDiagnostic("info", "repository.models_scanned", fmt.Sprintf("scanned %d GORM models", len(models)), "", "")
 	}
 	info, ok := models[opts.Model]
 	if !ok {
@@ -66,51 +72,14 @@ func generateRepositoryInterface(root string, info ModelInfo, report *Report) er
 		fmt.Sprintf(`"%s/internal/models"`, modulePath),
 		`"github.com/google/uuid"`,
 	}
-	body := fmt.Sprintf(`type %[1]sRepository interface {
-	Create(ctx context.Context, userID uuid.UUID, %[2]s *models.%[1]s) (*models.%[1]s, error)
-	List(ctx context.Context, userID uuid.UUID) ([]*models.%[1]s, error)
-	FindByID(ctx context.Context, userID uuid.UUID, %[2]sID uuid.UUID) (*models.%[1]s, error)
-	Update(ctx context.Context, userID uuid.UUID, %[2]s *models.%[1]s) (*models.%[1]s, error)
-	UpdateFields(ctx context.Context, userID uuid.UUID, %[2]sID uuid.UUID, %[2]s *models.%[1]s, fields *%[1]sUpdateFields) (*models.%[1]s, error)
-	Delete(ctx context.Context, userID uuid.UUID, %[2]sID uuid.UUID) error
-}
-
-type %[1]sUpdateFields struct {
-	columns []string
-	seen    map[string]struct{}
-}
-
-func New%[1]sUpdateFields() *%[1]sUpdateFields {
-	return &%[1]sUpdateFields{
-		seen: map[string]struct{}{},
+	body, err := renderTemplate("repository_interface.gotmpl", map[string]any{
+		"Model":        info.Name,
+		"ModelVar":     modelVar,
+		"UpdateFields": updateFields,
+	})
+	if err != nil {
+		return err
 	}
-}
-
-%[3]s
-func (f *%[1]sUpdateFields) Columns() []string {
-	if f == nil || len(f.columns) == 0 {
-		return nil
-	}
-	out := make([]string, len(f.columns))
-	copy(out, f.columns)
-	return out
-}
-
-func (f *%[1]sUpdateFields) add(column string) *%[1]sUpdateFields {
-	if f == nil {
-		f = New%[1]sUpdateFields()
-	}
-	if f.seen == nil {
-		f.seen = map[string]struct{}{}
-	}
-	if _, ok := f.seen[column]; ok {
-		return f
-	}
-	f.seen[column] = struct{}{}
-	f.columns = append(f.columns, column)
-	return f
-}
-`, info.Name, modelVar, updateFields)
 	return writeNewGeneratedFile(path, generatedFile("repository", imports, body, true), report)
 }
 
@@ -143,102 +112,21 @@ func generatePostgresRepository(root string, info ModelInfo, label string, scope
 		`"github.com/google/uuid"`,
 		`"gorm.io/gorm"`,
 	}
-	body := fmt.Sprintf(`type %[1]sRepository struct {
-	db *gorm.DB
-}
-
-func New%[1]sRepository(db *gorm.DB) repository.%[1]sRepository {
-	return &%[1]sRepository{db: db}
-}
-
-func (r *%[1]sRepository) Create(ctx context.Context, userID uuid.UUID, %[2]s *models.%[1]s) (*models.%[1]s, error) {
-%[5]s
-	if err := r.db.WithContext(ctx).Create(%[2]s).Error; err != nil {
-		return nil, xerr.Wrapf(err, "创建%[4]s失败")
-	}
-	return %[2]s, nil
-}
-
-func (r *%[1]sRepository) List(ctx context.Context, userID uuid.UUID) ([]*models.%[1]s, error) {
-	var rows []*models.%[1]s
-
-	err := r.db.WithContext(ctx).%[6]s
-		Order("%[3]s DESC").
-		Find(&rows).Error
+	body, err := renderTemplate("repository_postgres.gotmpl", map[string]any{
+		"Model":             info.Name,
+		"ModelVar":          modelVar,
+		"OrderColumn":       orderColumn,
+		"Label":             label,
+		"CreateScope":       createScopeSnippet(scope, info, modelVar, label),
+		"ListScope":         listScopeSnippet(scope, tableName),
+		"FindScope":         findScopeSnippet(scope, tableName, modelVar),
+		"UpdateScope":       updateScopeSnippet(scope, tableName, modelVar, modelVar+".ID"),
+		"UpdateFieldsScope": updateScopeSnippet(scope, tableName, modelVar, modelVar+"ID"),
+		"DeleteScope":       updateScopeSnippet(scope, tableName, modelVar, modelVar+"ID"),
+	})
 	if err != nil {
-		return nil, xerr.Wrapf(err, "查询%[4]s列表失败")
+		return err
 	}
-
-	return rows, nil
-}
-
-func (r *%[1]sRepository) FindByID(ctx context.Context, userID uuid.UUID, %[2]sID uuid.UUID) (*models.%[1]s, error) {
-	%[2]s := &models.%[1]s{}
-	err := r.db.WithContext(ctx).%[7]s
-		First(%[2]s).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, xerr.NotFound("%[4]s不存在")
-	}
-	if err != nil {
-		return nil, xerr.Wrapf(err, "查询%[4]s失败")
-	}
-	return %[2]s, nil
-}
-
-func (r *%[1]sRepository) Update(ctx context.Context, userID uuid.UUID, %[2]s *models.%[1]s) (*models.%[1]s, error) {
-	result := r.db.WithContext(ctx).
-		Model(&models.%[1]s{}).
-%[8]s
-		Omit("id", "user_id", "user", "created_at", "updated_at").
-		Updates(%[2]s)
-	if result.Error != nil {
-		return nil, xerr.Wrapf(result.Error, "更新%[4]s失败")
-	}
-	if result.RowsAffected == 0 {
-		return nil, xerr.NotFound("%[4]s不存在")
-	}
-	return r.FindByID(ctx, userID, %[2]s.ID)
-}
-
-func (r *%[1]sRepository) UpdateFields(ctx context.Context, userID uuid.UUID, %[2]sID uuid.UUID, %[2]s *models.%[1]s, fields *repository.%[1]sUpdateFields) (*models.%[1]s, error) {
-	columns := fields.Columns()
-	if len(columns) == 0 {
-		return nil, xerr.BadRequest("更新字段不能为空")
-	}
-	result := r.db.WithContext(ctx).
-		Model(&models.%[1]s{}).
-%[9]s
-		Select(columns).
-		Updates(%[2]s)
-	if result.Error != nil {
-		return nil, xerr.Wrapf(result.Error, "更新%[4]s失败")
-	}
-	if result.RowsAffected == 0 {
-		return nil, xerr.NotFound("%[4]s不存在")
-	}
-	return r.FindByID(ctx, userID, %[2]sID)
-}
-
-func (r *%[1]sRepository) Delete(ctx context.Context, userID uuid.UUID, %[2]sID uuid.UUID) error {
-	result := r.db.WithContext(ctx).
-%[10]s
-		Delete(&models.%[1]s{})
-	if result.Error != nil {
-		return xerr.Wrapf(result.Error, "删除%[4]s失败")
-	}
-	if result.RowsAffected == 0 {
-		return xerr.NotFound("%[4]s不存在")
-	}
-	return nil
-}
-`, info.Name, modelVar, orderColumn, label,
-		createScopeSnippet(scope, info, modelVar, label),
-		listScopeSnippet(scope, tableName),
-		findScopeSnippet(scope, tableName, modelVar),
-		updateScopeSnippet(scope, tableName, modelVar, modelVar+".ID"),
-		updateScopeSnippet(scope, tableName, modelVar, modelVar+"ID"),
-		updateScopeSnippet(scope, tableName, modelVar, modelVar+"ID"),
-	)
 	return writeNewGeneratedFile(path, generatedFile("postgres", imports, body, true), report)
 }
 
@@ -258,7 +146,7 @@ func repositoryScopeFor(info ModelInfo, raw string) (RepositoryScope, error) {
 		return RepositoryScope{Kind: "direct", UserColumn: "user_id"}, nil
 	}
 	if raw == "" {
-		return RepositoryScope{}, fmt.Errorf("codegen repository: model %s must have UserID uuid.UUID or provide -scope local_column:table.column:user_column", info.Name)
+		return RepositoryScope{}, fmt.Errorf("codegen repository: model %s must have UserID uuid.UUID or provide -scope local_column:table.column:user_column, for example -scope conversation_id:conversations.id:user_id", info.Name)
 	}
 	scope, err := parseRepositoryScope(raw)
 	if err != nil {
@@ -377,13 +265,22 @@ func updatableModelFields(info ModelInfo) []ModelField {
 
 func generateModelHook(root string, info ModelInfo, report *Report) error {
 	path := filepath.Join(root, "internal", "models", "hooks.go")
-	hook := modelBeforeCreateHook(info)
+	hook, err := modelBeforeCreateHook(info)
+	if err != nil {
+		return err
+	}
 	if !fileExists(path) {
 		imports := []string{
 			`"github.com/google/uuid"`,
 			`"gorm.io/gorm"`,
 		}
-		body := modelEnsureUUIDSnippet() + "\n" + hook
+		body, err := renderTemplate("model_hooks.gotmpl", map[string]any{
+			"IncludeEnsureUUID": true,
+			"Hook":              hook,
+		})
+		if err != nil {
+			return err
+		}
 		return writeNewGeneratedFile(path, generatedFile("models", imports, body, false), report)
 	}
 
@@ -398,7 +295,14 @@ func generateModelHook(root string, info ModelInfo, report *Report) error {
 
 	next := string(data)
 	if !strings.Contains(next, "func ensureUUID(id *uuid.UUID)") {
-		next = strings.TrimRight(next, "\n") + "\n\n" + modelEnsureUUIDSnippet()
+		ensureUUID, err := renderTemplate("model_hooks.gotmpl", map[string]any{
+			"IncludeEnsureUUID": true,
+			"Hook":              "",
+		})
+		if err != nil {
+			return err
+		}
+		next = strings.TrimRight(next, "\n") + "\n\n" + ensureUUID
 	}
 	next = strings.TrimRight(next, "\n") + "\n\n" + hook
 	withImports, err := ensureImports([]byte(next), []string{
@@ -416,26 +320,20 @@ func generateModelHook(root string, info ModelInfo, report *Report) error {
 		report.Add(FileUnchanged, path)
 		return nil
 	}
+	if report.IsPreview() {
+		report.Add(FileWouldModify, path)
+		return nil
+	}
 	report.Add(FileModified, path)
 	return os.WriteFile(path, formatted, 0o644)
 }
 
-func modelEnsureUUIDSnippet() string {
-	return `func ensureUUID(id *uuid.UUID) {
-	if *id == uuid.Nil {
-		*id = uuid.New()
-	}
-}
-`
-}
-
-func modelBeforeCreateHook(info ModelInfo) string {
+func modelBeforeCreateHook(info ModelInfo) (string, error) {
 	receiver := modelHookReceiver(info.Name)
-	return fmt.Sprintf(`func (%[1]s *%[2]s) BeforeCreate(tx *gorm.DB) error {
-	ensureUUID(&%[1]s.ID)
-	return nil
-}
-`, receiver, info.Name)
+	return renderTemplate("model_before_create.gotmpl", map[string]any{
+		"Receiver": receiver,
+		"Model":    info.Name,
+	})
 }
 
 func modelHookReceiver(modelName string) string {
@@ -472,6 +370,10 @@ func writeNewGeneratedFile(path, content string, report *Report) error {
 	formatted, err := format.Source([]byte(content))
 	if err != nil {
 		return fmt.Errorf("format generated file %s: %w\n%s", path, err, content)
+	}
+	if report.IsPreview() {
+		report.Add(FileWouldAdd, path)
+		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err

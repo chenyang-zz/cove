@@ -1,0 +1,44 @@
+type {{.Model}}Repository interface {
+	Create(ctx context.Context, userID uuid.UUID, {{.ModelVar}} *models.{{.Model}}) (*models.{{.Model}}, error)
+	List(ctx context.Context, userID uuid.UUID) ([]*models.{{.Model}}, error)
+	FindByID(ctx context.Context, userID uuid.UUID, {{.ModelVar}}ID uuid.UUID) (*models.{{.Model}}, error)
+	Update(ctx context.Context, userID uuid.UUID, {{.ModelVar}} *models.{{.Model}}) (*models.{{.Model}}, error)
+	UpdateFields(ctx context.Context, userID uuid.UUID, {{.ModelVar}}ID uuid.UUID, {{.ModelVar}} *models.{{.Model}}, fields *{{.Model}}UpdateFields) (*models.{{.Model}}, error)
+	Delete(ctx context.Context, userID uuid.UUID, {{.ModelVar}}ID uuid.UUID) error
+}
+
+type {{.Model}}UpdateFields struct {
+	columns []string
+	seen    map[string]struct{}
+}
+
+func New{{.Model}}UpdateFields() *{{.Model}}UpdateFields {
+	return &{{.Model}}UpdateFields{
+		seen: map[string]struct{}{},
+	}
+}
+
+{{.UpdateFields}}
+func (f *{{.Model}}UpdateFields) Columns() []string {
+	if f == nil || len(f.columns) == 0 {
+		return nil
+	}
+	out := make([]string, len(f.columns))
+	copy(out, f.columns)
+	return out
+}
+
+func (f *{{.Model}}UpdateFields) add(column string) *{{.Model}}UpdateFields {
+	if f == nil {
+		f = New{{.Model}}UpdateFields()
+	}
+	if f.seen == nil {
+		f.seen = map[string]struct{}{}
+	}
+	if _, ok := f.seen[column]; ok {
+		return f
+	}
+	f.seen[column] = struct{}{}
+	f.columns = append(f.columns, column)
+	return f
+}

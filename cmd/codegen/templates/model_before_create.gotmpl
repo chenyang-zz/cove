@@ -1,0 +1,4 @@
+func ({{.Receiver}} *{{.Model}}) BeforeCreate(tx *gorm.DB) error {
+	ensureUUID(&{{.Receiver}}.ID)
+	return nil
+}

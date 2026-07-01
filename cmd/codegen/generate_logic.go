@@ -12,28 +12,20 @@ func generateLogic(root string, route Route, report *Report) error {
 	if route.Directive.SSE {
 		output = "<-chan " + strings.TrimSpace(route.Directive.Event)
 	}
-	body := fmt.Sprintf(`// %[1]sLogic contains the %[7]s use case.
-type %[1]sLogic struct {
-	ctx    context.Context
-	svcCtx *svc.ServiceContext
-	log    *slog.Logger
-}
-
-// New%[1]sLogic creates a %[1]sLogic.
-func New%[1]sLogic(ctx context.Context, svcCtx *svc.ServiceContext) *%[1]sLogic {
-	return &%[1]sLogic{
-		ctx:    ctx,
-		svcCtx: svcCtx,
-		log:    xlog.Component("logic.%[2]s.%[3]s"),
+	body, err := renderTemplate("logic.gotmpl", map[string]any{
+		"LogicType":       route.HandlerMethod + "Logic",
+		"Method":          route.HandlerMethod,
+		"UseCase":         lowerFirst(route.HandlerMethod),
+		"Domain":          route.Domain,
+		"Component":       strings.ToLower(route.HandlerMethod),
+		"Args":            strings.Join(methodArgs, ", "),
+		"ReturnSignature": logicReturnSignature(output),
+		"ZeroReturn":      logicZeroReturn(output),
+		"MethodComment":   logicMethodComment(route),
+	})
+	if err != nil {
+		return err
 	}
-}
-
-%[8]s
-func (l *%[1]sLogic) %[1]s(%[4]s) %[5]s {
-	_ = l
-%[6]s
-}
-`, route.HandlerMethod, route.Domain, strings.ToLower(route.HandlerMethod), strings.Join(methodArgs, ", "), logicReturnSignature(output), logicZeroReturn(output), lowerFirst(route.HandlerMethod), logicMethodComment(route))
 
 	imports = append(imports,
 		`"context"`,

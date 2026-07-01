@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"go/ast"
@@ -38,9 +39,6 @@ func writeGeneratedFile(path, content string, report *Report) error {
 	if err != nil {
 		return fmt.Errorf("format generated file %s: %w\n%s", path, err, content)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
 	if data, err := os.ReadFile(path); err == nil {
 		if !strings.HasPrefix(string(data), generatedHeader) {
 			return fmt.Errorf("refuse to overwrite non-codegen file %s", path)
@@ -49,9 +47,20 @@ func writeGeneratedFile(path, content string, report *Report) error {
 			report.Add(FileUnchanged, path)
 			return nil
 		}
+		if report.IsPreview() {
+			report.Add(FileWouldModify, path)
+			return nil
+		}
 		report.Add(FileModified, path)
 		return os.WriteFile(path, formatted, 0o644)
 	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if report.IsPreview() {
+		report.Add(FileWouldAdd, path)
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 	report.Add(FileAdded, path)
@@ -74,6 +83,10 @@ func appendGoFile(path string, imports []string, body string, report *Report) er
 	}
 	if bytes.Equal(data, formatted) {
 		report.Add(FileUnchanged, path)
+		return nil
+	}
+	if report.IsPreview() {
+		report.Add(FileWouldModify, path)
 		return nil
 	}
 	report.Add(FileModified, path)
@@ -197,12 +210,39 @@ func replaceRange(src []byte, start, end int, text string) []byte {
 func printReport(w io.Writer, report Report, color bool) {
 	fmt.Fprintln(w, "codegen:")
 	if len(report.Files) == 0 {
-		fmt.Fprintln(w, colorize("  = no files changed", ansiGray, color))
-		return
+		if len(report.Diagnostics) == 0 {
+			fmt.Fprintln(w, colorize("  = no files changed", ansiGray, color))
+			return
+		}
 	}
 	for _, file := range report.Files {
 		symbol, colorCode := fileChangeStyle(file.Kind)
 		fmt.Fprintf(w, "  %s\n", colorize(fmt.Sprintf("%s %s", symbol, file.Path), colorCode, color))
+	}
+	for _, item := range report.Diagnostics {
+		symbol, colorCode := diagnosticStyle(item.Level)
+		line := fmt.Sprintf("%s %s: %s", symbol, item.Code, item.Message)
+		if item.Hint != "" {
+			line += " (" + item.Hint + ")"
+		}
+		if item.File != "" {
+			line += " [" + item.File + "]"
+		}
+		fmt.Fprintf(w, "  %s\n", colorize(line, colorCode, color))
+	}
+}
+
+func printReportWithFormat(w io.Writer, report Report, format ReportFormat, color bool) error {
+	switch format {
+	case "", ReportFormatText:
+		printReport(w, report, color)
+		return nil
+	case ReportFormatJSON:
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		return enc.Encode(report)
+	default:
+		return fmt.Errorf("unsupported report format %q, want text or json", format)
 	}
 }
 
@@ -212,10 +252,25 @@ func fileChangeStyle(kind FileChangeKind) (string, string) {
 		return "+", ansiGreen
 	case FileModified:
 		return "~", ansiYellow
+	case FileWouldAdd:
+		return "+?", ansiGreen
+	case FileWouldModify:
+		return "~?", ansiYellow
 	case FileSkipped, FileUnchanged:
 		return "=", ansiGray
 	default:
 		return "?", ansiGray
+	}
+}
+
+func diagnosticStyle(level string) (string, string) {
+	switch level {
+	case "error":
+		return "!", ansiRed
+	case "warn", "warning":
+		return "!", ansiYellow
+	default:
+		return "i", ansiGray
 	}
 }
 
@@ -224,6 +279,7 @@ const (
 	ansiGreen  = "\x1b[32m"
 	ansiYellow = "\x1b[33m"
 	ansiGray   = "\x1b[90m"
+	ansiRed    = "\x1b[31m"
 )
 
 func colorize(text, code string, color bool) string {

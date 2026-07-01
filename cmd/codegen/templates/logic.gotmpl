@@ -1,0 +1,21 @@
+// {{.LogicType}} contains the {{.UseCase}} use case.
+type {{.LogicType}} struct {
+	ctx    context.Context
+	svcCtx *svc.ServiceContext
+	log    *slog.Logger
+}
+
+// New{{.LogicType}} creates a {{.LogicType}}.
+func New{{.LogicType}}(ctx context.Context, svcCtx *svc.ServiceContext) *{{.LogicType}} {
+	return &{{.LogicType}}{
+		ctx:    ctx,
+		svcCtx: svcCtx,
+		log:    xlog.Component("logic.{{.Domain}}.{{.Component}}"),
+	}
+}
+
+{{.MethodComment}}
+func (l *{{.LogicType}}) {{.Method}}({{.Args}}) {{.ReturnSignature}} {
+	_ = l
+{{.ZeroReturn}}
+}

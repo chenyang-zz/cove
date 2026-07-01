@@ -17,14 +17,13 @@ func generateHandler(root, domain string, routes []Route, existing map[string]st
 	var snippets []string
 	generatedHandlerType := false
 	if _, ok := existing[handlerType]; !ok {
-		snippets = append(snippets, fmt.Sprintf(`type %[1]s struct {
-	svc *svc.ServiceContext
-}
-
-func New%[1]s(svcCtx *svc.ServiceContext) %[1]s {
-	return %[1]s{svc: svcCtx}
-}
-`, handlerType))
+		snippet, err := renderTemplate("handler_type.gotmpl", map[string]any{
+			"HandlerType": handlerType,
+		})
+		if err != nil {
+			return err
+		}
+		snippets = append(snippets, snippet)
 		existing[handlerType] = handlerPath(root, domain)
 		existing["New"+handlerType] = handlerPath(root, domain)
 		generatedHandlerType = true
@@ -98,7 +97,6 @@ func handlerImports(domain string, routes []Route, includeSvc bool) []string {
 
 func handlerMethodSnippet(route Route, requestDTOs map[string]RequestDTO) (string, error) {
 	var b strings.Builder
-	fmt.Fprintf(&b, "func (h %s) %s(c *gin.Context) {\n", route.HandlerType, route.HandlerMethod)
 	if route.Directive.Input != "" {
 		inputVar, bindMethod := handlerInputBinding(route)
 		fmt.Fprintf(&b, "\tvar %s %s\n", inputVar, route.Directive.Input)
@@ -137,8 +135,7 @@ func handlerMethodSnippet(route Route, requestDTOs map[string]RequestDTO) (strin
 		b.WriteString("\t\treturn\n")
 		b.WriteString("\t}\n")
 		b.WriteString("\tresponse.StreamEvents(c, events)\n")
-		b.WriteString("}\n")
-		return b.String(), nil
+		return renderHandlerMethod(route, b.String())
 	}
 	if route.Directive.Output == "" {
 		fmt.Fprintf(&b, "\tif err := %slogic.New%sLogic(c.Request.Context(), h.svc).%s(%s); err != nil {\n", route.Domain, route.HandlerMethod, route.HandlerMethod, strings.Join(callArgs, ", "))
@@ -146,8 +143,7 @@ func handlerMethodSnippet(route Route, requestDTOs map[string]RequestDTO) (strin
 		b.WriteString("\t\treturn\n")
 		b.WriteString("\t}\n")
 		b.WriteString("\tresponse.OK(c, nil)\n")
-		b.WriteString("}\n")
-		return b.String(), nil
+		return renderHandlerMethod(route, b.String())
 	}
 	fmt.Fprintf(&b, "\tout, err := %slogic.New%sLogic(c.Request.Context(), h.svc).%s(%s)\n", route.Domain, route.HandlerMethod, route.HandlerMethod, strings.Join(callArgs, ", "))
 	b.WriteString("\tif err != nil {\n")
@@ -155,8 +151,15 @@ func handlerMethodSnippet(route Route, requestDTOs map[string]RequestDTO) (strin
 	b.WriteString("\t\treturn\n")
 	b.WriteString("\t}\n")
 	b.WriteString("\tresponse.OK(c, out)\n")
-	b.WriteString("}\n")
-	return b.String(), nil
+	return renderHandlerMethod(route, b.String())
+}
+
+func renderHandlerMethod(route Route, body string) (string, error) {
+	return renderTemplate("handler_method.gotmpl", map[string]any{
+		"HandlerType":   route.HandlerType,
+		"HandlerMethod": route.HandlerMethod,
+		"Body":          body,
+	})
 }
 
 func handlerInputBinding(route Route) (inputVar string, bindMethod string) {

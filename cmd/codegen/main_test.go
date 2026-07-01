@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"go/ast"
 	"os"
 	"path/filepath"
@@ -156,6 +158,37 @@ func TestSnakeCaseKeepsAcronymsTogether(t *testing.T) {
 	for input, want := range tests {
 		if got := snakeCase(input); got != want {
 			t.Fatalf("snakeCase(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestRenderTemplateMissingTemplateReturnsError(t *testing.T) {
+	// 验证缺失模板时会返回包含模板名的明确错误。
+	_, err := renderTemplate("missing.gotmpl", nil)
+	if err == nil {
+		t.Fatal("renderTemplate error = nil, want missing template error")
+	}
+	if !strings.Contains(err.Error(), "render template missing.gotmpl") {
+		t.Fatalf("error = %v, want template name", err)
+	}
+}
+
+func TestRenderModelBeforeCreateTemplate(t *testing.T) {
+	// 验证 BeforeCreate 模板会生成 UUID 初始化 hook。
+	out, err := renderTemplate("model_before_create.gotmpl", map[string]any{
+		"Receiver": "m",
+		"Model":    "Message",
+	})
+	if err != nil {
+		t.Fatalf("renderTemplate error = %v", err)
+	}
+	for _, want := range []string{
+		"func (m *Message) BeforeCreate(tx *gorm.DB) error",
+		"ensureUUID(&m.ID)",
+		"return nil",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("template output missing %q:\n%s", want, out)
 		}
 	}
 }
@@ -1426,6 +1459,201 @@ func TestPrintReportUsesColorAndCanDisableColor(t *testing.T) {
 	}
 	if !strings.Contains(plainOut, "+ internal/transport/http/handler/book.go") {
 		t.Fatalf("plain output missing added file:\n%s", plainOut)
+	}
+}
+
+func TestGenerateRoutesDryRunDoesNotWriteFiles(t *testing.T) {
+	// 验证 dry-run 只报告将要新增的文件，不实际写入磁盘。
+	root := t.TempDir()
+	writeFile(t, root, "internal/transport/http/routes/book.go", `package routes
+
+import (
+	"github.com/boxify/api-go/internal/transport/http/handler"
+	"github.com/gin-gonic/gin"
+)
+
+func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler) {
+	// routegen: output=response.BookResponse
+	api.GET("/books/:id", book.Show)
+}
+`)
+
+	report, err := GenerateRoutesWithOptions(RouteOptions{Root: root, DryRun: true})
+	if err != nil {
+		t.Fatalf("GenerateRoutesWithOptions error = %v", err)
+	}
+	if report.Mode != ModeDryRun {
+		t.Fatalf("mode = %q, want %q", report.Mode, ModeDryRun)
+	}
+	assertReportContains(t, report, FileWouldAdd, "internal/transport/http/handler/book.go")
+	assertReportContains(t, report, FileWouldAdd, "internal/logic/book/show.go")
+	if _, err := os.Stat(filepath.Join(root, "internal/transport/http/handler/book.go")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("handler file stat err = %v, want not exist", err)
+	}
+}
+
+func TestRunRouteCommandCheckFailsWhenChangesNeeded(t *testing.T) {
+	// 验证 check 模式发现待生成文件时返回专用错误，方便 CI 失败。
+	root := t.TempDir()
+	writeFile(t, root, "internal/transport/http/routes/book.go", `package routes
+
+import (
+	"github.com/boxify/api-go/internal/transport/http/handler"
+	"github.com/gin-gonic/gin"
+)
+
+func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler) {
+	// routegen: output=response.BookResponse
+	api.GET("/books/:id", book.Show)
+}
+`)
+
+	report, err := runRouteCommand([]string{"-root", root, "--check", "--no-color"})
+	if !errors.Is(err, ErrCheckFailed) {
+		t.Fatalf("runRouteCommand error = %v, want ErrCheckFailed", err)
+	}
+	assertReportContains(t, report, FileWouldAdd, "internal/transport/http/handler/book.go")
+	if _, err := os.Stat(filepath.Join(root, "internal/transport/http/handler/book.go")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("handler file stat err = %v, want not exist", err)
+	}
+}
+
+func TestPrintReportJSONIncludesModeCommandAndDiagnostics(t *testing.T) {
+	// 验证 JSON report 可被脚本解析，并包含工具模式、命令和诊断信息。
+	report := Report{
+		Command: "doctor",
+		Mode:    ModeCheck,
+		Files: []FileChange{
+			{Kind: FileWouldAdd, Path: "internal/logic/book/show.go"},
+		},
+		Diagnostics: []Diagnostic{
+			{Level: "error", Code: "route.sse.missing_event", Message: "missing @event"},
+		},
+	}
+	var out bytes.Buffer
+	if err := printReportWithFormat(&out, report, ReportFormatJSON, false); err != nil {
+		t.Fatalf("printReportWithFormat error = %v", err)
+	}
+	var got Report
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("json.Unmarshal error = %v\n%s", err, out.String())
+	}
+	if got.Command != "doctor" || got.Mode != ModeCheck || len(got.Diagnostics) != 1 {
+		t.Fatalf("json report = %+v", got)
+	}
+}
+
+func TestListRouteItemsShowsGenerationStatus(t *testing.T) {
+	// 验证 route --list 的底层数据能展示路由和 handler/logic 是否已存在。
+	root := t.TempDir()
+	writeFile(t, root, "internal/transport/http/routes/book.go", `package routes
+
+import (
+	"github.com/boxify/api-go/internal/transport/http/handler"
+	"github.com/gin-gonic/gin"
+)
+
+func RegisterBookRoutes(api *gin.RouterGroup, book handler.BookHandler) {
+	// routegen: output=response.BookResponse
+	api.GET("/books/:id", book.Show)
+}
+`)
+	writeFile(t, root, "internal/transport/http/handler/book.go", `package handler
+
+type BookHandler struct{}
+
+func (h BookHandler) Show() {}
+`)
+
+	items, err := ListRoutes(root)
+	if err != nil {
+		t.Fatalf("ListRoutes error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("len(items) = %d, want 1", len(items))
+	}
+	item := items[0]
+	if item.HTTPMethod != "GET" || item.Path != "/books/:id" || !item.HandlerExists || item.LogicExists {
+		t.Fatalf("route item = %+v", item)
+	}
+}
+
+func TestListRepositoryModelsMarksScopeRequirement(t *testing.T) {
+	// 验证 repository --list-models 能区分直接 user_id 模型和需要 scope 的模型。
+	root := t.TempDir()
+	writeFile(t, root, "internal/models/book.go", `package models
+
+import "github.com/google/uuid"
+
+type Book struct {
+	ID     uuid.UUID `+"`gorm:\"column:id\"`"+`
+	UserID uuid.UUID `+"`gorm:\"column:user_id\"`"+`
+}
+`)
+	writeFile(t, root, "internal/models/message.go", `package models
+
+import "github.com/google/uuid"
+
+type Message struct {
+	ID             uuid.UUID `+"`gorm:\"column:id\"`"+`
+	ConversationID uuid.UUID `+"`gorm:\"column:conversation_id\"`"+`
+}
+`)
+
+	models, err := ListRepositoryModels(root)
+	if err != nil {
+		t.Fatalf("ListRepositoryModels error = %v", err)
+	}
+	got := map[string]RepositoryModelItem{}
+	for _, item := range models {
+		got[item.Model] = item
+	}
+	if got["Book"].Scope != "direct" || got["Book"].RequiresScope {
+		t.Fatalf("Book item = %+v", got["Book"])
+	}
+	if got["Message"].Scope != "requires_scope" || !got["Message"].RequiresScope {
+		t.Fatalf("Message item = %+v", got["Message"])
+	}
+}
+
+func TestDoctorReportsRouteAndRepositoryProblems(t *testing.T) {
+	// 验证 doctor 只扫描诊断问题，不生成文件。
+	root := t.TempDir()
+	writeFile(t, root, "internal/transport/http/routes/chat.go", `package routes
+
+import (
+	"github.com/boxify/api-go/internal/transport/http/handler"
+	"github.com/gin-gonic/gin"
+)
+
+func RegisterChatRoutes(api *gin.RouterGroup, chat handler.ChatHandler) {
+	chatRoutes := api.Group("/chat")
+	// @sse
+	chatRoutes.POST("/stream", chat.Stream)
+}
+`)
+	writeFile(t, root, "internal/models/message.go", `package models
+
+import "github.com/google/uuid"
+
+type Message struct {
+	ID             uuid.UUID `+"`gorm:\"column:id\"`"+`
+	ConversationID uuid.UUID `+"`gorm:\"column:conversation_id\"`"+`
+}
+`)
+
+	report, err := RunDoctor(DoctorOptions{Root: root})
+	if err != nil {
+		t.Fatalf("RunDoctor error = %v", err)
+	}
+	if !report.HasDiagnostic("route.sse.missing_event") {
+		t.Fatalf("diagnostics = %+v, want missing event", report.Diagnostics)
+	}
+	if !report.HasDiagnostic("repository.scope.required") {
+		t.Fatalf("diagnostics = %+v, want required scope", report.Diagnostics)
+	}
+	if len(report.Files) != 0 {
+		t.Fatalf("files = %+v, want no generated files", report.Files)
 	}
 }
 
