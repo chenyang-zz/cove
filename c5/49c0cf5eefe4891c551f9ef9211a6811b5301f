@@ -1,0 +1,29 @@
+configs/config.yml.example
+  s_6c8abbf2fdc533::t_bcabbfa3933803 12,16,33-34
+deployments/docker-compose.yml
+  s_6c8abbf2fdc533::t_3b11289ac089d1 5-7,27
+docs/openapi.json
+  s_6c8abbf2fdc533::t_f7bddc40a3674c 437
+internal/config/config.go
+  s_6c8abbf2fdc533::t_3455125506695d 160-161,169
+internal/config/config_test.go
+  s_6c8abbf2fdc533::t_f87705db00fa99 27-28
+internal/core/rag/search/options.go
+  s_6c8abbf2fdc533::t_2166758f67771b 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "c549c0cf5eefe4891c551f9ef9211a6811b5301f",
+  "prompts": {},
+  "sessions": {
+    "s_6c8abbf2fdc533": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_6c8abbf2fdc533",
+        "model": "unknown"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
