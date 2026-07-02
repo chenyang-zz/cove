@@ -1,0 +1,49 @@
+configs/config.yml.example
+  s_bed6061d2f5706::t_679c7602030115 60-61
+internal/core/llm/options_test.go
+  s_bed6061d2f5706::t_36d26113a6be46 1-21
+internal/worker/tasks/parse_document_test.go
+  s_bed6061d2f5706::t_bae9f1ee4262b5 202,218,222-224,334,339,350,379-381
+internal/config/config_test.go
+  s_bed6061d2f5706::t_3f41c3edcf1f49 12,27-28,33,83,119,125,162,221
+internal/core/rag/classifier/classifier_test.go
+  s_bed6061d2f5706::t_6a93d76ced89dd 182
+internal/logic/document/document_test.go
+  s_bed6061d2f5706::t_357badfbe920a0 294
+internal/infrastructure/llm/anthropic.go
+  s_bed6061d2f5706::t_aa371a2dbc3c37 137
+internal/infrastructure/llm/openai_test.go
+  s_bed6061d2f5706::t_18016ebc5d5e2b 227-290
+  s_bed6061d2f5706::t_036eab7f0122f2 6
+internal/infrastructure/llm/openai.go
+  s_bed6061d2f5706::t_b3ecc34d10b041 161,165-185
+internal/worker/tasks/parse_document.go
+  s_bed6061d2f5706::t_78d53b43e9734c 130
+internal/core/llm/client.go
+  s_bed6061d2f5706::t_d4ce358b4902e8 10
+internal/core/llm/options.go
+  s_bed6061d2f5706::t_e008f9cc12a964 8-12,15-17,34-44,50-56,58
+  s_bed6061d2f5706::t_7505fc14a0acee 57
+internal/config/config.go
+  s_bed6061d2f5706::t_d27ee979b48c9e 99-101,170,221
+internal/core/llm/manager_test.go
+  s_bed6061d2f5706::t_6f671484726fb0 31
+internal/transport/http/router_test.go
+  s_bed6061d2f5706::t_a2fa3f20ab620d 136
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "3e5e9c7d64a07c07174d794725b9511929e8b851",
+  "prompts": {},
+  "sessions": {
+    "s_bed6061d2f5706": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f1817-2478-7702-8e5a-fc4304ca0bc4",
+        "model": "gpt-5.5"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
