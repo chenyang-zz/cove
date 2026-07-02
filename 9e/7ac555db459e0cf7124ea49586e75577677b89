@@ -1,0 +1,53 @@
+internal/logic/document/upload_document.go
+  s_bed6061d2f5706::t_b0c92c8eaa2427 52
+AGENTS.md
+  s_bed6061d2f5706::t_6376399423a15b 4
+internal/logic/document/helper.go
+  s_bed6061d2f5706::t_14e998816cf039 10,20,90-107
+  s_bed6061d2f5706::t_711d017bdf0165 108-109
+internal/svc/context.go
+  s_bed6061d2f5706::t_b79bebdc80b6e4 147
+  s_bed6061d2f5706::t_14e998816cf039 18,71
+internal/core/rag/webcrawl/options.go
+  s_bed6061d2f5706::t_14e998816cf039 23,83-84,86-89
+  s_bed6061d2f5706::t_d529739f256363 85
+  s_bed6061d2f5706::t_d8fb076f32edc1 12
+  s_bed6061d2f5706::t_92910ebcf2d72d 90-92
+  s_bed6061d2f5706::t_c99d020ae44f4b 93
+internal/transport/http/router_test.go
+  s_bed6061d2f5706::t_14e998816cf039 8,19,105,195-211,1117-1143,1164-1165,1186-1187
+internal/core/rag/webcrawl/crawler.go
+  s_bed6061d2f5706::t_14e998816cf039 92,105-118
+  s_bed6061d2f5706::t_4660869999fbcb 28
+  s_bed6061d2f5706::t_70bb77126ac5ca 119-120
+internal/core/rag/webcrawl/crawler_test.go
+  s_bed6061d2f5706::t_14e998816cf039 221-253
+internal/logic/document/document_test.go
+  s_bed6061d2f5706::t_14e998816cf039 7-8,22,264-286,730-822,825-830,832-843
+CLAUDE.md
+  s_bed6061d2f5706::t_6376399423a15b 4
+internal/logic/document/import_document_from_url.go
+  h_e1f1392360ad67 112
+  s_bed6061d2f5706::t_14e998816cf039 5-13,40-69,71-72,74-111,113-132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "9e7ac555db459e0cf7124ea49586e75577677b89",
+  "prompts": {},
+  "humans": {
+    "h_e1f1392360ad67": {
+      "author": "chenyang <904852749@qq.com>"
+    }
+  },
+  "sessions": {
+    "s_bed6061d2f5706": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f1817-2478-7702-8e5a-fc4304ca0bc4",
+        "model": "gpt-5.5"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
