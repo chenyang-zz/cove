@@ -1,0 +1,80 @@
+internal/core/rag/documentparse/extract_pdf.go
+  s_a5f282227fb606::t_dfd8a3760b94ff 1-33
+CLAUDE.md
+  s_a5f282227fb606::t_b506d353742775 4
+internal/core/rag/documentparse/extract_markdown.go
+  s_a5f282227fb606::t_c69e31cabd15cb 1-26
+internal/core/rag/prompt/types.go
+  s_a5f282227fb606::t_8430abc65b1d2b 14,18
+  s_a5f282227fb606::t_9c568ada6ec64e 1-5,7,10
+  s_a5f282227fb606::t_5fdd356e5030ac 6,8-9,11-13,15-17
+  s_a5f282227fb606::t_14b4935a9d21bb 19-22,25-28,30,33-34,36,38,41
+  s_a5f282227fb606::t_a8fa5fdecbfa4d 23,37,39-40
+  s_a5f282227fb606::t_f03a8d30bdca0b 24
+  s_a5f282227fb606::t_031fc937836680 29,31-32,35
+go.mod
+  s_a5f282227fb606::t_fc92ddc5353589 7,18,21,28,31
+  s_a5f282227fb606::t_7966b7bed5509d 45
+internal/core/rag/prompt/content_classifier.tmpl
+  s_a5f282227fb606::t_6cae86b73dbeab 1-13
+internal/core/rag/documentparse/extract_html.go
+  s_a5f282227fb606::t_8c3c87151932a7 1-24
+internal/core/rag/documentparse/extract_docx.go
+  s_a5f282227fb606::t_b3b9d2257a3359 1-74
+internal/core/rag/prompt/image_description.tmpl
+  s_a5f282227fb606::t_6cae86b73dbeab 1-7
+internal/core/rag/documentparse/parser.go
+  s_a5f282227fb606::t_079a317ecb44f7 17,24-26,48-51,74,85
+  h_e1f1392360ad67 1-16,18-23,27-47,52-73,75-84,86-88
+internal/core/rag/documentparse/doc.go
+  s_a5f282227fb606::t_90b9435db38bf6 1-5
+AGENTS.md
+  s_a5f282227fb606::t_b506d353742775 4
+internal/core/rag/prompt/prompt_test.go
+  s_a5f282227fb606::t_e5e425878ea43b 1-4
+  s_a5f282227fb606::t_2bcf9f08c16c5f 5-9,12-13,50-51
+  s_a5f282227fb606::t_f8e8590360be74 17-20,22-23,25-26,28-30,34,36-37,39-41,45,47
+  s_a5f282227fb606::t_20d8514141818c 10-11,14-16,21,24,27,31-33,35,38,42-44,46,48-49
+go.sum
+  s_a5f282227fb606::t_0f56a11832e70b 11-12,20-21,103,147-148,176-177,252-253,271-274,280-283,290,292-296,303-307,317-321,324,328-332,338-342,350-352
+internal/core/rag/documentparse/types.go
+  s_a5f282227fb606::t_3206c6e306af46 1-33
+internal/core/rag/documentparse/options.go
+  s_a5f282227fb606::t_88c467b2c5518e 1-64
+internal/core/rag/documentparse/parser_test.go
+  s_a5f282227fb606::t_a586e334835d8a 8,108-115,168-192
+  s_a5f282227fb606::t_a82da15cf96d4f 1-7,9-107,116-129,131-157,165-167,193-194
+  s_a5f282227fb606::t_9a7fdc7142f60b 130
+  s_a5f282227fb606::t_f54f5e665ecaa3 158-164
+.idea/dictionaries/project.xml
+  s_58a74b2b20d9c5::t_c337cc13cf1176 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.8",
+  "base_commit_sha": "3aa3801aae8102e0f44e57ff21fab4123eb30cac",
+  "prompts": {},
+  "humans": {
+    "h_e1f1392360ad67": {
+      "author": "chenyang <904852749@qq.com>"
+    }
+  },
+  "sessions": {
+    "s_58a74b2b20d9c5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_58a74b2b20d9c5",
+        "model": "unknown"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    },
+    "s_a5f282227fb606": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f13c4-cb77-7061-8d78-bfdb2b2034a3",
+        "model": "gpt-5.5"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
