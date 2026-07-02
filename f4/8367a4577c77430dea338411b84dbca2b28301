@@ -1,0 +1,31 @@
+internal/repository/tag.go
+  s_bed6061d2f5706::t_22b50e5d76c7e1 17
+internal/worker/tasks/parse_document.go
+  s_bed6061d2f5706::t_5ec76c0b9a986a 76-81,93-97,109-113,119,135-140,145-148,157-161,163-178,183-187,380-386
+  s_bed6061d2f5706::t_0f9c55e24eae0b 387-388
+internal/worker/tasks/parse_document_test.go
+  s_bed6061d2f5706::t_105221a9224b62 10,106-155,332,336,358,362-364,409,471,475,500-502,545,568-629,653
+internal/repository/postgres/document_knowledgebase_test.go
+  s_bed6061d2f5706::t_78ca8bf3eecae0 281
+  s_bed6061d2f5706::t_1db2bd52a0568a 5,107-190,276-280,282-283
+  s_bed6061d2f5706::t_92c00dabda3e67 284
+internal/repository/postgres/tag.go
+  s_bed6061d2f5706::t_ff84ed6aefc8fd 8-9,95-138,151-166
+  s_bed6061d2f5706::t_e471e8ad8f0e58 167
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "f48367a4577c77430dea338411b84dbca2b28301",
+  "prompts": {},
+  "sessions": {
+    "s_bed6061d2f5706": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f1817-2478-7702-8e5a-fc4304ca0bc4",
+        "model": "gpt-5.5"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
