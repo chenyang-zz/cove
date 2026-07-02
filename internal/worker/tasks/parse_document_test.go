@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -99,6 +100,56 @@ func (r *fakeDocumentRepository) UpdateFields(ctx context.Context, userID uuid.U
 
 func (r *fakeDocumentRepository) Delete(ctx context.Context, userID uuid.UUID, documentID uuid.UUID) error {
 	delete(r.rows, documentID)
+	return nil
+}
+
+type fakeTagRepository struct {
+	syncErr          error
+	syncedUserID     uuid.UUID
+	syncedDocumentID uuid.UUID
+	syncedNames      []string
+	events           *[]string
+}
+
+func (r *fakeTagRepository) Create(ctx context.Context, userID uuid.UUID, tag *models.Tag) (*models.Tag, error) {
+	tag.UserID = userID
+	return tag, nil
+}
+
+func (r *fakeTagRepository) List(ctx context.Context, userID uuid.UUID) ([]*models.Tag, error) {
+	return nil, nil
+}
+
+func (r *fakeTagRepository) FindByID(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) (*models.Tag, error) {
+	return nil, xerr.NotFound("标签不存在")
+}
+
+func (r *fakeTagRepository) Update(ctx context.Context, userID uuid.UUID, tag *models.Tag) (*models.Tag, error) {
+	return tag, nil
+}
+
+func (r *fakeTagRepository) UpdateFields(ctx context.Context, userID uuid.UUID, tagID uuid.UUID, tag *models.Tag, fields *repository.TagUpdateFields) (*models.Tag, error) {
+	return tag, nil
+}
+
+func (r *fakeTagRepository) SyncDocumentTags(ctx context.Context, userID uuid.UUID, documentID uuid.UUID, names []string) ([]models.Tag, error) {
+	if r.events != nil {
+		*r.events = append(*r.events, "pg:sync_tags")
+	}
+	r.syncedUserID = userID
+	r.syncedDocumentID = documentID
+	r.syncedNames = append([]string(nil), names...)
+	if r.syncErr != nil {
+		return nil, r.syncErr
+	}
+	rows := make([]models.Tag, 0, len(names))
+	for _, name := range names {
+		rows = append(rows, models.Tag{ID: uuid.New(), UserID: userID, Name: name, Color: "#155EEF"})
+	}
+	return rows, nil
+}
+
+func (r *fakeTagRepository) Delete(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) error {
 	return nil
 }
 
@@ -278,9 +329,11 @@ func TestHandleParseDocumentProcessesTextDocument(t *testing.T) {
 	var llmConfigs []corellm.ModelConfig
 	docRepo := newFakeDocumentRepository(row)
 	docRepo.events = &events
+	tagRepo := &fakeTagRepository{events: &events}
 	handler := NewParseDocumentTask(&svc.ServiceContext{
 		Config:            config.Config{Rag: config.RagConfig{EmbeddingDim: 3, ChunkIndex: "boxify_chunks"}},
 		DocumentRepo:      docRepo,
+		TagRepo:           tagRepo,
 		ModelConfigRepo:   &fakeModelConfigRepository{rows: []*models.ModelConfig{{UserID: userID, Type: string(domain.EmbeddingModelType), Provider: "fake", ModelName: "db-embed", APIKeyEncrypted: encryptedAPIKey, BaseURL: "https://llm.example", IsDefault: true}, {UserID: userID, Type: string(domain.ChatModelType), Provider: "fake", ModelName: "db-chat", APIKeyEncrypted: encryptedAPIKey, BaseURL: "https://llm.example", IsDefault: true}}},
 		SecretCipher:      cipher,
 		Storage:           store,
@@ -302,9 +355,12 @@ func TestHandleParseDocumentProcessesTextDocument(t *testing.T) {
 	if row.Status != "done" || row.Progress != 1 || row.ChunkNum != 1 || row.ErrorMsg != nil {
 		t.Fatalf("document after parse = %+v, want done/progress/chunk/error cleared", row)
 	}
-	wantEvents := strings.Join([]string{"status:parsing", "progress:0.1", "progress:0.3", "progress:0.8", "es:update_tags", "status:done", "progress:1.0"}, "|")
+	wantEvents := strings.Join([]string{"status:parsing", "progress:0.1", "progress:0.3", "progress:0.8", "pg:sync_tags", "es:update_tags", "status:done", "progress:1.0"}, "|")
 	if got := strings.Join(events, "|"); got != wantEvents {
 		t.Fatalf("events = %s, want %s", got, wantEvents)
+	}
+	if tagRepo.syncedUserID != userID || tagRepo.syncedDocumentID != documentID || !slices.Equal(tagRepo.syncedNames, []string{"手动", "自动"}) {
+		t.Fatalf("synced tags user=%s document=%s names=%v, want merged manual and classified tags", tagRepo.syncedUserID, tagRepo.syncedDocumentID, tagRepo.syncedNames)
 	}
 	if createdIndex == nil {
 		t.Fatal("created index body = nil, want mapping initialization")
@@ -350,6 +406,7 @@ func TestHandleParseDocumentMarksFailedWhenEmbeddingConfigMissing(t *testing.T) 
 	handler := NewParseDocumentTask(&svc.ServiceContext{
 		Config:            config.Config{Rag: config.RagConfig{EmbeddingDim: 3, ChunkIndex: "boxify_chunks"}},
 		DocumentRepo:      newFakeDocumentRepository(row),
+		TagRepo:           &fakeTagRepository{},
 		ModelConfigRepo:   &fakeModelConfigRepository{},
 		SecretCipher:      cipher,
 		Storage:           store,
@@ -411,9 +468,11 @@ func TestHandleParseDocumentCompletesWhenChatConfigMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Encrypt API key error = %v", err)
 	}
+	tagRepo := &fakeTagRepository{}
 	handler := NewParseDocumentTask(&svc.ServiceContext{
 		Config:            config.Config{Rag: config.RagConfig{EmbeddingDim: 3, ChunkIndex: "boxify_chunks"}},
 		DocumentRepo:      newFakeDocumentRepository(row),
+		TagRepo:           tagRepo,
 		ModelConfigRepo:   &fakeModelConfigRepository{rows: []*models.ModelConfig{{UserID: userID, Type: string(domain.EmbeddingModelType), Provider: "fake", ModelName: "db-embed", APIKeyEncrypted: encryptedAPIKey, BaseURL: "https://llm.example", IsDefault: true}}},
 		SecretCipher:      cipher,
 		Storage:           store,
@@ -437,6 +496,9 @@ func TestHandleParseDocumentCompletesWhenChatConfigMissing(t *testing.T) {
 	encoded, _ := json.Marshal(updateTagsBody)
 	if text := string(encoded); !strings.Contains(text, `"手动"`) {
 		t.Fatalf("update tags body = %s, want existing document tag", text)
+	}
+	if !slices.Equal(tagRepo.syncedNames, []string{"手动"}) {
+		t.Fatalf("synced tags = %v, want existing document tag", tagRepo.syncedNames)
 	}
 }
 
@@ -480,6 +542,7 @@ func TestHandleParseDocumentMarksFailedWhenUpdateTagsFails(t *testing.T) {
 	handler := NewParseDocumentTask(&svc.ServiceContext{
 		Config:            config.Config{Rag: config.RagConfig{EmbeddingDim: 3, ChunkIndex: "boxify_chunks"}},
 		DocumentRepo:      newFakeDocumentRepository(row),
+		TagRepo:           &fakeTagRepository{},
 		ModelConfigRepo:   &fakeModelConfigRepository{rows: []*models.ModelConfig{{UserID: userID, Type: string(domain.EmbeddingModelType), Provider: "fake", ModelName: "db-embed", APIKeyEncrypted: encryptedAPIKey, BaseURL: "https://llm.example", IsDefault: true}, {UserID: userID, Type: string(domain.ChatModelType), Provider: "fake", ModelName: "db-chat", APIKeyEncrypted: encryptedAPIKey, BaseURL: "https://llm.example", IsDefault: true}}},
 		SecretCipher:      cipher,
 		Storage:           store,
@@ -499,6 +562,68 @@ func TestHandleParseDocumentMarksFailedWhenUpdateTagsFails(t *testing.T) {
 	}
 	if row.Status != "failed" || row.Progress != 0.8 || row.ErrorMsg == nil || !strings.Contains(*row.ErrorMsg, "批量更新 Elasticsearch 文档失败") {
 		t.Fatalf("document after update tags failure = %+v, want failed progress=0.8 ES update error", row)
+	}
+}
+
+func TestHandleParseDocumentMarksFailedWhenSyncDocumentTagsFails(t *testing.T) {
+	// 验证分类标签同步到 PostgreSQL 失败时文档标记 failed，并且不会继续更新 ES 标签。
+	ctx := context.Background()
+	userID := uuid.New()
+	documentID := uuid.New()
+	row := &models.Document{ID: documentID, UserID: userID, FileName: "a.txt", FileExt: ".txt", FileKey: "docs/a.txt", Status: "pending"}
+	store := newMemoryStore()
+	store.data[row.FileKey] = []byte("hello world")
+	esServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Elastic-Product", "Elasticsearch")
+		switch {
+		case r.Method == http.MethodHead && r.URL.Path == "/boxify_chunks":
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodPost && r.URL.Path == "/boxify_chunks/_delete_by_query":
+			_, _ = w.Write([]byte(`{"deleted":0}`))
+		case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/boxify_chunks/_doc/"):
+			_, _ = w.Write([]byte(`{"result":"created"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/boxify_chunks/_update_by_query":
+			t.Fatalf("unexpected ES tag update after PG sync failure")
+		default:
+			t.Fatalf("unexpected ES request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer esServer.Close()
+	esClient, err := infraes.NewClient(infraes.Config{URL: esServer.URL})
+	if err != nil {
+		t.Fatalf("NewClient error = %v", err)
+	}
+	cipher, err := security.NewSecretCipher("0123456789abcdef0123456789abcdef")
+	if err != nil {
+		t.Fatalf("NewSecretCipher error = %v", err)
+	}
+	encryptedAPIKey, err := cipher.Encrypt("db-key")
+	if err != nil {
+		t.Fatalf("Encrypt API key error = %v", err)
+	}
+	handler := NewParseDocumentTask(&svc.ServiceContext{
+		Config:            config.Config{Rag: config.RagConfig{EmbeddingDim: 3, ChunkIndex: "boxify_chunks"}},
+		DocumentRepo:      newFakeDocumentRepository(row),
+		TagRepo:           &fakeTagRepository{syncErr: errors.New("pg sync failed")},
+		ModelConfigRepo:   &fakeModelConfigRepository{rows: []*models.ModelConfig{{UserID: userID, Type: string(domain.EmbeddingModelType), Provider: "fake", ModelName: "db-embed", APIKeyEncrypted: encryptedAPIKey, BaseURL: "https://llm.example", IsDefault: true}, {UserID: userID, Type: string(domain.ChatModelType), Provider: "fake", ModelName: "db-chat", APIKeyEncrypted: encryptedAPIKey, BaseURL: "https://llm.example", IsDefault: true}}},
+		SecretCipher:      cipher,
+		Storage:           store,
+		RAGChunkRepo:      repositoryes.NewRAGChunkRepository(esClient, "boxify_chunks"),
+		RAGClassifier:     ragclassifier.NewClassifier(),
+		RAGDocumentParser: ragparser.NewParser(),
+		RAGChunker:        ragchunker.NewChunker(ragchunker.WithParentChunkTokens(1200)),
+		LLMManager:        newFakeLLMManager(fakeLLMClient{invokeAnswer: `["自动"]`}),
+	})
+	task, err := domain.NewParseDocumentTask(userID, documentID)
+	if err != nil {
+		t.Fatalf("NewParseDocumentTask error = %v", err)
+	}
+
+	if err := handler.Handle(ctx, task); err != nil {
+		t.Fatalf("HandleParseDocument error = %v", err)
+	}
+	if row.Status != "failed" || row.Progress != 0.8 || row.ErrorMsg == nil || !strings.Contains(*row.ErrorMsg, "pg sync failed") {
+		t.Fatalf("document after PG sync failure = %+v, want failed progress=0.8 PG error", row)
 	}
 }
 
@@ -525,6 +650,7 @@ func TestHandleParseDocumentMarksFailedWhenEmbeddingAPIKeyDecryptFails(t *testin
 	handler := NewParseDocumentTask(&svc.ServiceContext{
 		Config:       config.Config{Rag: config.RagConfig{EmbeddingDim: 3, ChunkIndex: "boxify_chunks"}},
 		DocumentRepo: newFakeDocumentRepository(row),
+		TagRepo:      &fakeTagRepository{},
 		ModelConfigRepo: &fakeModelConfigRepository{rows: []*models.ModelConfig{{
 			UserID: userID, Type: string(domain.EmbeddingModelType), Provider: "fake", ModelName: "db-embed", APIKeyEncrypted: "not-encrypted", IsDefault: true,
 		}}},

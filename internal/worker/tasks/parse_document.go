@@ -73,6 +73,12 @@ func (h *ParseDocumentTask) Handle(ctx context.Context, task *domain.Task) error
 		_ = h.markParseFailed(ctx, doc, err)
 		return err
 	}
+	h.log.InfoContext(ctx, "文档原始文件读取完成",
+		slog.String("user_id", doc.UserID.String()),
+		slog.String("document_id", doc.ID.String()),
+		slog.String("file_ext", doc.FileExt),
+		slog.Int("file_size", len(content)),
+	)
 
 	if h.svcCtx.RAGDocumentParser == nil || h.svcCtx.RAGChunker == nil {
 		err := xerr.Internal("文档解析任务依赖未初始化", nil)
@@ -84,6 +90,11 @@ func (h *ParseDocumentTask) Handle(ctx context.Context, task *domain.Task) error
 		_ = h.markParseFailed(ctx, doc, err)
 		return nil
 	}
+	h.log.InfoContext(ctx, "文档内容解析完成",
+		slog.String("user_id", doc.UserID.String()),
+		slog.String("document_id", doc.ID.String()),
+		slog.Int("text_runes", len([]rune(parsed.Text))),
+	)
 	if err := h.updateParseState(ctx, doc, &models.Document{
 		Progress: 0.3,
 	}, repository.NewDocumentUpdateFields().Progress()); err != nil {
@@ -95,12 +106,17 @@ func (h *ParseDocumentTask) Handle(ctx context.Context, task *domain.Task) error
 		_ = h.markParseFailed(ctx, doc, err)
 		return nil
 	}
+	h.log.InfoContext(ctx, "文档分块完成",
+		slog.String("user_id", doc.UserID.String()),
+		slog.String("document_id", doc.ID.String()),
+		slog.Int("parent_chunk_count", len(chunks)),
+	)
 	if err := h.updateParseState(ctx, doc, &models.Document{
 		Progress: 0.8,
 	}, repository.NewDocumentUpdateFields().Progress()); err != nil {
 		return err
 	}
-	if h.svcCtx.RAGChunkRepo == nil || h.svcCtx.LLMManager == nil {
+	if h.svcCtx.RAGChunkRepo == nil || h.svcCtx.LLMManager == nil || h.svcCtx.TagRepo == nil {
 		err := xerr.Internal("文档解析任务依赖未初始化", nil)
 		_ = h.markParseFailed(ctx, doc, err)
 		return nil
@@ -116,10 +132,20 @@ func (h *ParseDocumentTask) Handle(ctx context.Context, task *domain.Task) error
 		_ = h.markParseFailed(ctx, doc, err)
 		return nil
 	}
+	h.log.InfoContext(ctx, "文档向量化完成",
+		slog.String("user_id", doc.UserID.String()),
+		slog.String("document_id", doc.ID.String()),
+		slog.Int("embedding_count", len(vectors)),
+		slog.Int("embedding_dim", vectorDimension(vectors)),
+	)
 	if err := h.svcCtx.RAGChunkRepo.EnsureIndex(ctx, h.svcCtx.Config.Rag.EmbeddingDim); err != nil {
 		_ = h.markParseFailed(ctx, doc, err)
 		return nil
 	}
+	h.log.InfoContext(ctx, "文档 chunk 索引已确认",
+		slog.String("user_id", doc.UserID.String()),
+		slog.String("document_id", doc.ID.String()),
+	)
 	if err := h.svcCtx.RAGChunkRepo.DeleteByDocument(ctx, doc.UserID, doc.ID); err != nil {
 		_ = h.markParseFailed(ctx, doc, err)
 		return nil
@@ -128,11 +154,37 @@ func (h *ParseDocumentTask) Handle(ctx context.Context, task *domain.Task) error
 		_ = h.markParseFailed(ctx, doc, err)
 		return nil
 	}
+	h.log.InfoContext(ctx, "文档 chunk 写入完成",
+		slog.String("user_id", doc.UserID.String()),
+		slog.String("document_id", doc.ID.String()),
+		slog.Int("indexed_chunk_count", len(texts)),
+	)
 	tags := h.classifyDocumentTags(ctx, doc, parsed.Text)
+	h.log.InfoContext(ctx, "文档自动标签提取完成",
+		slog.String("user_id", doc.UserID.String()),
+		slog.String("document_id", doc.ID.String()),
+		slog.Int("tag_count", len(tags)),
+	)
+	syncedTags, err := h.svcCtx.TagRepo.SyncDocumentTags(ctx, doc.UserID, doc.ID, tags)
+	if err != nil {
+		_ = h.markParseFailed(ctx, doc, err)
+		return nil
+	}
+	doc.Tags = syncedTags
+	h.log.InfoContext(ctx, "文档标签已同步到数据库",
+		slog.String("user_id", doc.UserID.String()),
+		slog.String("document_id", doc.ID.String()),
+		slog.Int("tag_count", len(tags)),
+	)
 	if err := h.svcCtx.RAGChunkRepo.UpdateTags(ctx, doc.UserID, doc.ID, tags); err != nil {
 		_ = h.markParseFailed(ctx, doc, err)
 		return nil
 	}
+	h.log.InfoContext(ctx, "文档标签已同步到 Elasticsearch",
+		slog.String("user_id", doc.UserID.String()),
+		slog.String("document_id", doc.ID.String()),
+		slog.Int("tag_count", len(tags)),
+	)
 
 	if err := h.updateParseState(ctx, doc, &models.Document{
 		Status:   domain.DocumentStatusDone,
@@ -323,6 +375,15 @@ func documentChunkTexts(chunks []*ragchunker.Chunk) []string {
 		}
 	}
 	return texts
+}
+
+func vectorDimension(vectors [][]float64) int {
+	for _, vector := range vectors {
+		if len(vector) != 0 {
+			return len(vector)
+		}
+	}
+	return 0
 }
 
 // documentTagNames 转换标签行数据为字符串切片

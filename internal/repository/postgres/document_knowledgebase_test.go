@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -103,6 +104,90 @@ func TestDocumentRepositoryListFiltersAndPaginatesWhenPostgresEnvIsConfigured(t 
 	}
 }
 
+func TestTagRepositorySyncDocumentTagsWhenPostgresEnvIsConfigured(t *testing.T) {
+	// 验证标签仓储会按名称创建或复用当前用户标签，并替换文档标签关联。
+	db := newAuthTestDB(t)
+	ctx := context.Background()
+	userRepo := repositorypostgres.NewUserRepository(db)
+	docRepo := repositorypostgres.NewDocumentRepository(db)
+	tagRepo := repositorypostgres.NewTagRepository(db)
+
+	user, err := userRepo.Create(ctx, &models.User{Username: "tag-sync-" + uuid.NewString(), PasswordHash: "hash"})
+	if err != nil {
+		t.Fatalf("Create user error = %v", err)
+	}
+	otherUser, err := userRepo.Create(ctx, &models.User{Username: "tag-sync-other-" + uuid.NewString(), PasswordHash: "hash"})
+	if err != nil {
+		t.Fatalf("Create other user error = %v", err)
+	}
+	doc, err := docRepo.Create(ctx, user.ID, &models.Document{FileName: "a.txt", FileExt: ".txt", FileSize: 1, FileKey: "a", SourceType: "file", Status: "pending"})
+	if err != nil {
+		t.Fatalf("Create document error = %v", err)
+	}
+	existing := &models.Tag{ID: uuid.New(), UserID: user.ID, Name: "手动", Color: "#155EEF"}
+	otherUserSameName := &models.Tag{ID: uuid.New(), UserID: otherUser.ID, Name: "自动", Color: "#155EEF"}
+	if err := db.WithContext(ctx).Create(existing).Error; err != nil {
+		t.Fatalf("Create existing tag error = %v", err)
+	}
+	if err := db.WithContext(ctx).Create(otherUserSameName).Error; err != nil {
+		t.Fatalf("Create other user tag error = %v", err)
+	}
+	t.Cleanup(func() {
+		db.WithContext(context.Background()).Exec("DELETE FROM document_tags WHERE document_id = ?", doc.ID)
+		db.WithContext(context.Background()).Exec("DELETE FROM documents WHERE user_id IN ?", []uuid.UUID{user.ID, otherUser.ID})
+		db.WithContext(context.Background()).Exec("DELETE FROM tags WHERE user_id IN ?", []uuid.UUID{user.ID, otherUser.ID})
+		db.WithContext(context.Background()).Exec("DELETE FROM users WHERE id IN ?", []uuid.UUID{user.ID, otherUser.ID})
+	})
+
+	rows, err := tagRepo.SyncDocumentTags(ctx, user.ID, doc.ID, []string{" 手动 ", "自动", "手动", ""})
+	if err != nil {
+		t.Fatalf("SyncDocumentTags error = %v", err)
+	}
+	if len(rows) != 2 || rows[0].ID != existing.ID || rows[0].Name != "手动" || rows[1].Name != "自动" || rows[1].UserID != user.ID || rows[1].ID == otherUserSameName.ID {
+		t.Fatalf("synced rows = %+v, want existing current-user tag and new current-user tag", rows)
+	}
+
+	found, err := docRepo.FindByID(ctx, user.ID, doc.ID)
+	if err != nil {
+		t.Fatalf("FindByID after sync error = %v", err)
+	}
+	gotNames := documentTagNamesForTest(found.Tags)
+	if !slices.Equal(gotNames, []string{"手动", "自动"}) {
+		t.Fatalf("document tags = %v, want synced names", gotNames)
+	}
+
+	rows, err = tagRepo.SyncDocumentTags(ctx, user.ID, doc.ID, []string{"新标签"})
+	if err != nil {
+		t.Fatalf("SyncDocumentTags replace error = %v", err)
+	}
+	if len(rows) != 1 || rows[0].Name != "新标签" {
+		t.Fatalf("replaced rows = %+v, want only 新标签", rows)
+	}
+	found, err = docRepo.FindByID(ctx, user.ID, doc.ID)
+	if err != nil {
+		t.Fatalf("FindByID after replace error = %v", err)
+	}
+	gotNames = documentTagNamesForTest(found.Tags)
+	if !slices.Equal(gotNames, []string{"新标签"}) {
+		t.Fatalf("document tags after replace = %v, want only 新标签", gotNames)
+	}
+
+	rows, err = tagRepo.SyncDocumentTags(ctx, user.ID, doc.ID, nil)
+	if err != nil {
+		t.Fatalf("SyncDocumentTags empty error = %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("empty sync rows = %+v, want empty", rows)
+	}
+	found, err = docRepo.FindByID(ctx, user.ID, doc.ID)
+	if err != nil {
+		t.Fatalf("FindByID after empty sync error = %v", err)
+	}
+	if len(found.Tags) != 0 {
+		t.Fatalf("document tags after empty sync = %+v, want empty association", found.Tags)
+	}
+}
+
 func TestRepositoryCountByKnowledgeBaseWhenPostgresEnvIsConfigured(t *testing.T) {
 	// 验证文档和图片仓储会按当前用户、指定知识库批量统计数量，并忽略未归属和其他用户的数据。
 	db := newAuthTestDB(t)
@@ -186,6 +271,15 @@ func TestRepositoryCountByKnowledgeBaseWhenPostgresEnvIsConfigured(t *testing.T)
 	if len(emptyDocCounts) != 0 || len(emptyImageCounts) != 0 {
 		t.Fatalf("empty counts = docs:%+v images:%+v, want empty maps", emptyDocCounts, emptyImageCounts)
 	}
+}
+
+func documentTagNamesForTest(rows []models.Tag) []string {
+	out := make([]string, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, row.Name)
+	}
+	slices.Sort(out)
+	return out
 }
 
 func TestKnowledgeBaseRepositoryFindDefaultWhenPostgresEnvIsConfigured(t *testing.T) {

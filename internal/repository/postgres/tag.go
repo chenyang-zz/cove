@@ -5,6 +5,8 @@ package postgres
 import (
 	"context"
 	"errors"
+	"strings"
+
 	"github.com/boxify/api-go/internal/models"
 	"github.com/boxify/api-go/internal/repository"
 	"github.com/boxify/api-go/internal/xerr"
@@ -90,6 +92,50 @@ func (r *TagRepository) UpdateFields(ctx context.Context, userID uuid.UUID, tagI
 	return r.FindByID(ctx, userID, tagID)
 }
 
+func (r *TagRepository) SyncDocumentTags(ctx context.Context, userID uuid.UUID, documentID uuid.UUID, names []string) ([]models.Tag, error) {
+	cleanNames := normalizeTagNames(names)
+	rows := make([]models.Tag, 0, len(cleanNames))
+
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var document models.Document
+		if err := tx.Where("id = ? AND user_id = ?", documentID, userID).First(&document).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return xerr.NotFound("文档不存在")
+			}
+			return xerr.Wrapf(err, "查询文档失败")
+		}
+
+		for _, name := range cleanNames {
+			var tag models.Tag
+			err := tx.Where("user_id = ? AND name = ?", userID, name).First(&tag).Error
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				tag = models.Tag{
+					ID:     uuid.New(),
+					UserID: userID,
+					Name:   name,
+					Color:  "#155EEF",
+				}
+				if err := tx.Create(&tag).Error; err != nil {
+					return xerr.Wrapf(err, "创建标签失败")
+				}
+			} else if err != nil {
+				return xerr.Wrapf(err, "查询标签失败")
+			}
+			rows = append(rows, tag)
+		}
+
+		// 用 Replace 保证 document_tags 与当前解析出的标签集合保持一致，同时保留 tags 主表记录。
+		if err := tx.Model(&document).Association("Tags").Replace(rows); err != nil {
+			return xerr.Wrapf(err, "同步文档标签失败")
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
 func (r *TagRepository) Delete(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) error {
 	result := r.db.WithContext(ctx).
 		Where("id = ? AND user_id = ?", tagID, userID).
@@ -101,4 +147,21 @@ func (r *TagRepository) Delete(ctx context.Context, userID uuid.UUID, tagID uuid
 		return xerr.NotFound("标签不存在")
 	}
 	return nil
+}
+
+func normalizeTagNames(names []string) []string {
+	out := make([]string, 0, len(names))
+	seen := map[string]struct{}{}
+	for _, raw := range names {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	return out
 }
