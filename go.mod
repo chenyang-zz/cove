@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
+	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/RealAlexandreAI/json-repair v0.0.15
 	github.com/anthropics/anthropic-sdk-go v1.52.0
 	github.com/elastic/go-elasticsearch/v8 v8.19.6
@@ -14,16 +15,20 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hibiken/asynq v0.25.1
 	github.com/jackc/pgx/v5 v5.10.0
+	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/neo4j/neo4j-go-driver/v6 v6.1.0
+	github.com/nguyenthenguyen/docx v0.0.0-20230621112118-9c8e795a11db
 	github.com/openai/openai-go/v3 v3.41.0
 	github.com/pkoukk/tiktoken-go v0.1.8
 	github.com/redis/go-redis/v9 v9.7.0
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/gin-swagger v1.6.1
 	github.com/tencentyun/cos-go-sdk-v5 v0.7.66
+	github.com/yuin/goldmark v1.8.2
 	golang.org/x/crypto v0.50.0
 	golang.org/x/image v0.39.0
+	golang.org/x/net v0.53.0
 	golang.org/x/sync v0.21.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/postgres v1.6.0
@@ -37,6 +42,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.3.0 // indirect
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
+	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/bytedance/sonic v1.11.6 // indirect
@@ -106,7 +112,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.29.0 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
 	golang.org/x/arch v0.8.0 // indirect
-	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
