@@ -53,6 +53,7 @@ func (e *fakeEmbedder) EmbedOne(ctx context.Context, text string, dimensions int
 type fakeReranker struct {
 	calls     int
 	documents []string
+	topN      int
 	results   []RerankResult
 	err       error
 }
@@ -60,6 +61,7 @@ type fakeReranker struct {
 func (r *fakeReranker) Rerank(ctx context.Context, query string, documents []string, topN int) ([]RerankResult, error) {
 	r.calls++
 	r.documents = append([]string(nil), documents...)
+	r.topN = topN
 	if r.err != nil {
 		return nil, r.err
 	}
@@ -97,6 +99,13 @@ func TestNewSearcherAppliesOptions(t *testing.T) {
 		WithBM25Weight(0.3),
 		WithKnnOversample(5),
 		WithReranker(reranker),
+		WithRerankWindowSize(9),
+		WithRerankTopK(4),
+		WithRerankFailOpen(false),
+		WithRerankMinScore(0.2),
+		WithRerankDocumentBuilder(func(src map[string]any) string {
+			return "custom"
+		}),
 		WithFilterBuilder(filterBuilder),
 		WithSourceDecoder[sourceMeta](decodeSourceMeta),
 	)
@@ -121,6 +130,12 @@ func TestNewSearcherAppliesOptions(t *testing.T) {
 	}
 	if searcher.Reranker != reranker {
 		t.Fatalf("Reranker = %#v, want fake reranker", searcher.Reranker)
+	}
+	if searcher.RerankWindowSize != 9 || searcher.RerankTopK != 4 || searcher.RerankFailOpen {
+		t.Fatalf("rerank options = window %d topK %d open %v, want 9/4/false", searcher.RerankWindowSize, searcher.RerankTopK, searcher.RerankFailOpen)
+	}
+	if searcher.RerankMinScore == nil || *searcher.RerankMinScore != 0.2 || searcher.RerankDocumentBuilder == nil {
+		t.Fatalf("rerank min/builder = %#v/%v, want configured", searcher.RerankMinScore, searcher.RerankDocumentBuilder != nil)
 	}
 	if searcher.FilterBuilder == nil || searcher.sourceDecoder == nil {
 		t.Fatal("FilterBuilder or sourceDecoder is nil")
@@ -435,6 +450,9 @@ func TestSearcherUsesRerankerAndFallsBackOnError(t *testing.T) {
 	if gotIDs := resultIDs(got); !slices.Equal(gotIDs, []string{"b", "a"}) {
 		t.Fatalf("reranked result ids = %#v, want b,a", gotIDs)
 	}
+	if got[0].RerankScore == nil || *got[0].RerankScore != 0.99 || got[0].Score != 0 {
+		t.Fatalf("rerank/fused score = %#v/%v, want 0.99/0", got[0].RerankScore, got[0].Score)
+	}
 	if reranker.calls != 1 || !slices.Equal(reranker.documents, []string{"doc a", "doc b"}) {
 		t.Fatalf("reranker calls/documents = %d/%#v", reranker.calls, reranker.documents)
 	}
@@ -450,6 +468,163 @@ func TestSearcherUsesRerankerAndFallsBackOnError(t *testing.T) {
 	}
 	if gotIDs := resultIDs(fallback); !slices.Equal(gotIDs, []string{"a", "b"}) {
 		t.Fatalf("fallback result ids = %#v, want fused order a,b", gotIDs)
+	}
+}
+
+func TestSearcherCanDisableRerankPerInput(t *testing.T) {
+	// 验证请求级配置可以关闭构造级 reranker。
+	reranker := &fakeReranker{results: []RerankResult{{Index: 1, Score: 1}}}
+	esClient := &fakeESClient{resps: []map[string]any{
+		hitsResponse(hit("a", 2, source("doc a", "")), hit("b", 1, source("doc b", ""))),
+		hitsResponse(),
+	}}
+	embedder := &fakeEmbedder{vec: []float64{0.1}}
+
+	got, err := NewSearcher[sourceMeta](esClient, WithEmbedder(embedder), WithReranker(reranker)).
+		Search(context.Background(), "query", WithTopK(2), WithInputRerankEnabled(false))
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if reranker.calls != 0 {
+		t.Fatalf("reranker calls = %d, want 0", reranker.calls)
+	}
+	if gotIDs := resultIDs(got); !slices.Equal(gotIDs, []string{"a", "b"}) {
+		t.Fatalf("result ids = %#v, want fused order a,b", gotIDs)
+	}
+}
+
+func TestSearcherUsesRerankWindowTopKAndDocumentBuilder(t *testing.T) {
+	// 验证 rerank window 控制候选窗口，topK 透传给 reranker，文档 builder 覆盖默认 content。
+	reranker := &fakeReranker{results: []RerankResult{{Index: 1, Score: 0.8}, {Index: 0, Score: 0.7}}}
+	first := source("doc a", "")
+	first["title"] = "A"
+	second := source("doc b", "")
+	second["title"] = "B"
+	third := source("doc c", "")
+	third["title"] = "C"
+	esClient := &fakeESClient{resps: []map[string]any{
+		hitsResponse(hit("a", 3, first), hit("b", 2, second), hit("c", 1, third)),
+		hitsResponse(),
+	}}
+	embedder := &fakeEmbedder{vec: []float64{0.1}}
+
+	got, err := NewSearcher[sourceMeta](
+		esClient,
+		WithEmbedder(embedder),
+		WithReranker(reranker),
+		WithRerankWindowSize(2),
+		WithRerankTopK(1),
+		WithRerankDocumentBuilder(func(src map[string]any) string {
+			return valuex.String(src["title"]) + ":" + valuex.String(src["content"])
+		}),
+	).Search(context.Background(), "query", WithTopK(3))
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if reranker.topN != 1 {
+		t.Fatalf("reranker topN = %d, want 1", reranker.topN)
+	}
+	if !slices.Equal(reranker.documents, []string{"A:doc a", "B:doc b"}) {
+		t.Fatalf("reranker documents = %#v, want first two built docs", reranker.documents)
+	}
+	if gotIDs := resultIDs(got); !slices.Equal(gotIDs, []string{"b", "a"}) {
+		t.Fatalf("result ids = %#v, want b,a", gotIDs)
+	}
+}
+
+func TestSearcherFiltersInvalidDuplicateAndLowScoreRerankResults(t *testing.T) {
+	// 验证 reranker 返回越界、重复和低分结果时会被过滤，并保留有效 rerank 分数。
+	reranker := &fakeReranker{results: []RerankResult{
+		{Index: 5, Score: 1},
+		{Index: 1, Score: 0.4},
+		{Index: 0, Score: 0.9},
+		{Index: 0, Score: 0.8},
+	}}
+	esClient := &fakeESClient{resps: []map[string]any{
+		hitsResponse(hit("a", 2, source("doc a", "")), hit("b", 1, source("doc b", ""))),
+		hitsResponse(),
+	}}
+	embedder := &fakeEmbedder{vec: []float64{0.1}}
+
+	got, err := NewSearcher[sourceMeta](
+		esClient,
+		WithEmbedder(embedder),
+		WithReranker(reranker),
+		WithRerankMinScore(0.5),
+	).Search(context.Background(), "query", WithTopK(2))
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if gotIDs := resultIDs(got); !slices.Equal(gotIDs, []string{"a"}) {
+		t.Fatalf("result ids = %#v, want only a", gotIDs)
+	}
+	if got[0].RerankScore == nil || *got[0].RerankScore != 0.9 {
+		t.Fatalf("RerankScore = %#v, want 0.9", got[0].RerankScore)
+	}
+}
+
+func TestSearcherReturnsRerankErrorWhenFailClosed(t *testing.T) {
+	// 验证 fail-open 关闭时，reranker 错误会直接返回。
+	wantErr := errors.New("rerank failed")
+	esClient := &fakeESClient{resps: []map[string]any{
+		hitsResponse(hit("a", 1, source("doc a", ""))),
+		hitsResponse(),
+	}}
+	embedder := &fakeEmbedder{vec: []float64{0.1}}
+
+	_, err := NewSearcher[sourceMeta](
+		esClient,
+		WithEmbedder(embedder),
+		WithReranker(&fakeReranker{err: wantErr}),
+		WithRerankFailOpen(false),
+	).Search(context.Background(), "query", WithTopK(1))
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("Search() error = %v, want %v", err, wantErr)
+	}
+}
+
+func TestSearcherInputRerankOptionsOverrideSearcherOptions(t *testing.T) {
+	// 验证请求级 reranker、窗口、topK、失败策略、最低分和文档 builder 都优先于构造级配置。
+	defaultReranker := &fakeReranker{err: errors.New("should not be used")}
+	inputReranker := &fakeReranker{results: []RerankResult{{Index: 1, Score: 0.6}, {Index: 0, Score: 0.4}}}
+	esClient := &fakeESClient{resps: []map[string]any{
+		hitsResponse(hit("a", 3, source("doc a", "")), hit("b", 2, source("doc b", "")), hit("c", 1, source("doc c", ""))),
+		hitsResponse(),
+	}}
+	embedder := &fakeEmbedder{vec: []float64{0.1}}
+
+	got, err := NewSearcher[sourceMeta](
+		esClient,
+		WithEmbedder(embedder),
+		WithReranker(defaultReranker),
+		WithRerankWindowSize(3),
+		WithRerankTopK(3),
+		WithRerankFailOpen(false),
+		WithRerankMinScore(0.1),
+	).Search(
+		context.Background(),
+		"query",
+		WithTopK(3),
+		WithInputReranker(inputReranker),
+		WithInputRerankWindowSize(2),
+		WithInputRerankTopK(1),
+		WithInputRerankFailOpen(true),
+		WithInputRerankMinScore(0.5),
+		WithInputRerankDocumentBuilder(func(src map[string]any) string {
+			return "input:" + valuex.String(src["content"])
+		}),
+	)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if defaultReranker.calls != 0 || inputReranker.calls != 1 {
+		t.Fatalf("reranker calls = default %d input %d, want 0/1", defaultReranker.calls, inputReranker.calls)
+	}
+	if inputReranker.topN != 1 || !slices.Equal(inputReranker.documents, []string{"input:doc a", "input:doc b"}) {
+		t.Fatalf("input reranker topN/docs = %d/%#v, want 1/input docs", inputReranker.topN, inputReranker.documents)
+	}
+	if gotIDs := resultIDs(got); !slices.Equal(gotIDs, []string{"b"}) {
+		t.Fatalf("result ids = %#v, want only b after min score", gotIDs)
 	}
 }
 

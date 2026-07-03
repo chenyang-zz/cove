@@ -31,12 +31,13 @@ type NoopSearcher[T any] struct{}
 func NewSearcher[T any](esClient ESClient, opts ...Option) *Searcher[T] {
 	searcher := &Searcher[T]{
 		Options: Options{
-			Index:         defaultIndex,
-			EmbeddingDim:  defaultEmbeddingDim,
-			RecallSize:    defaultRecallSize,
-			VectorWeight:  defaultVectorWeight,
-			BM25Weight:    defaultBM25Weight,
-			FilterBuilder: defaultFilterBuilder,
+			Index:          defaultIndex,
+			EmbeddingDim:   defaultEmbeddingDim,
+			RecallSize:     defaultRecallSize,
+			VectorWeight:   defaultVectorWeight,
+			BM25Weight:     defaultBM25Weight,
+			RerankFailOpen: defaultRerankFailOpen,
+			FilterBuilder:  defaultFilterBuilder,
 		},
 		es: esClient,
 	}
@@ -118,45 +119,20 @@ func (s *Searcher[T]) Search(ctx context.Context, query string, opts ...InputOpt
 
 	fused := fuseScores(hits, Normalize(vecScores), Normalize(bmScores), s.VectorWeight, s.BM25Weight)
 	candidateIDs := rankedIDs(fused, max(topK, recallSize))
-	if s.Reranker != nil && len(candidateIDs) != 0 {
-		if reranked, err := s.rerank(ctx, req.Query, candidateIDs, hits, topK); err == nil {
-			candidateIDs = reranked
-		}
+	rerankScores := map[string]float64(nil)
+	candidateIDs, rerankScores, err = s.applyRerank(ctx, req, candidateIDs, hits, topK, recallSize)
+	if err != nil {
+		return nil, err
 	}
 
 	if len(candidateIDs) > topK {
 		candidateIDs = candidateIDs[:topK]
 	}
-	return s.resultsForIDs(ctx, candidateIDs, hits, fused)
-}
-
-// rerank 把候选 chunk id 映射成文档内容交给 reranker，再把返回下标映射回 chunk id。
-func (s *Searcher[T]) rerank(ctx context.Context, query string, candidateIDs []string, hits map[string]map[string]any, topK int) ([]string, error) {
-	docs := make([]string, 0, len(candidateIDs))
-	for _, id := range candidateIDs {
-		docs = append(docs, valuex.String(hits[id]["content"]))
-	}
-	reranked, err := s.Reranker.Rerank(ctx, query, docs, topK)
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]string, 0, len(reranked))
-	seen := map[int]struct{}{}
-	for _, item := range reranked {
-		if item.Index < 0 || item.Index >= len(candidateIDs) {
-			continue
-		}
-		if _, ok := seen[item.Index]; ok {
-			continue
-		}
-		seen[item.Index] = struct{}{}
-		ids = append(ids, candidateIDs[item.Index])
-	}
-	return ids, nil
+	return s.resultsForIDs(ctx, candidateIDs, hits, fused, rerankScores)
 }
 
 // resultsForIDs 组装检索结果；命中 child 时优先返回 parent 内容，给上层提供更完整上下文。
-func (s *Searcher[T]) resultsForIDs(ctx context.Context, ids []string, hits map[string]map[string]any, scores map[string]float64) ([]Output[T], error) {
+func (s *Searcher[T]) resultsForIDs(ctx context.Context, ids []string, hits map[string]map[string]any, scores map[string]float64, rerankScores map[string]float64) ([]Output[T], error) {
 	results := make([]Output[T], 0, len(ids))
 	for _, id := range ids {
 		src := hits[id]
@@ -171,11 +147,17 @@ func (s *Searcher[T]) resultsForIDs(ctx context.Context, ids []string, hits map[
 				return nil, err
 			}
 		}
+		var rerankScore *float64
+		if score, ok := rerankScores[id]; ok {
+			value := round4(score)
+			rerankScore = &value
+		}
 		results = append(results, Output[T]{
-			ID:      id,
-			Content: content,
-			Score:   round4(scores[id]),
-			Source:  source,
+			ID:          id,
+			Content:     content,
+			Score:       round4(scores[id]),
+			RerankScore: rerankScore,
+			Source:      source,
 		})
 	}
 	return results, nil
