@@ -44,7 +44,7 @@ This project is indexed by GitNexus as **boxify-api-go** (7811 symbols, 30848 re
 
 ## Testing
 
-- When adding or modifying test functions, you must use Chinese comments to explain what the test verifies.
+- When adding or modifying test functions, you must place a Chinese comment immediately above each test function explaining what the test verifies.
 
 ## Generated Code
 
@@ -65,7 +65,7 @@ Use `internal/core/rag/search` as the implementation template for new packages u
 - Prefer generic result/source types when the core behavior is reusable but callers need typed metadata.
 - Keep exported methods small and orchestration-focused. Move query building, normalization, filtering, sorting, decoding, and fallback behavior into private helper functions.
 - Key implementation steps must include Chinese comments explaining what they do, especially non-obvious algorithms, fallback behavior, score normalization, filtering, and external-service query construction.
-- Tests should use local fakes for dependencies, cover defaults/options, dependency errors, request overrides, helper edge cases, fallback paths, and result shaping. Every test function must include a Chinese comment explaining what the test verifies.
+- Tests should use local fakes for dependencies, cover defaults/options, dependency errors, request overrides, helper edge cases, fallback paths, and result shaping. Every test function must include a Chinese comment immediately above the function explaining what the test verifies.
 
 ## Go Documentation and Function Style
 
