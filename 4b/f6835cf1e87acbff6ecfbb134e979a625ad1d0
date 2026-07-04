@@ -1,0 +1,43 @@
+internal/core/tool/registry.go
+  s_a5f282227fb606::t_ea5156f4e2ab12 1,5,7-9,12-20,22-23,26,28-30,33-63,66-71,73-77,80-89,91-96,99-114,118-125,127-128
+  h_e1f1392360ad67 117
+internal/core/tool/runner.go
+  s_a5f282227fb606::t_ea5156f4e2ab12 1-75
+internal/core/tool/types.go
+  s_a5f282227fb606::t_295c2fbb4ca573 11-13
+  s_a5f282227fb606::t_ea5156f4e2ab12 1-10,14-52
+internal/core/tool/tool_test.go
+  s_a5f282227fb606::t_2c0f23f6b4fcd7 10,49,80,109,132,146,167
+  s_a5f282227fb606::t_815c635ded3445 1-9,11-48,50-79,81-108,110-131,133-145,147-166,168-206
+internal/core/tool/options.go
+  s_a5f282227fb606::t_ea5156f4e2ab12 1-14
+AGENTS.md
+  s_a5f282227fb606::t_2c0f23f6b4fcd7 47,68
+internal/core/tool/clone.go
+  s_a5f282227fb606::t_ea5156f4e2ab12 1-19
+internal/core/tool/doc.go
+  s_a5f282227fb606::t_ea5156f4e2ab12 1-6
+internal/core/tool/func.go
+  s_a5f282227fb606::t_ea5156f4e2ab12 1,5,8-11,14-22,25-30,33-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "4bf6835cf1e87acbff6ecfbb134e979a625ad1d0",
+  "prompts": {},
+  "humans": {
+    "h_e1f1392360ad67": {
+      "author": "chenyang <904852749@qq.com>"
+    }
+  },
+  "sessions": {
+    "s_a5f282227fb606": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f13c4-cb77-7061-8d78-bfdb2b2034a3",
+        "model": "gpt-5.5"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
