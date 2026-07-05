@@ -1,0 +1,53 @@
+internal/domain/tools/time.go
+  s_735be408a64636::t_2cd272bdccbcb1 32
+  s_a5f282227fb606::t_e9c40ec9587008 20,27
+  s_a5f282227fb606::t_5cb99e8ba51cf0 21-26,29
+  s_735be408a64636::t_8c752fd605b6c0 1-19,28,30-31,33-91
+internal/svc/context.go
+  s_735be408a64636::t_c5dd4084ea5af8 19-20,81,96-99,115
+internal/core/tool/clone.go
+  s_a5f282227fb606::t_6824b7f6089066 4,9-30,56-70
+internal/domain/tools/time_test.go
+  s_a5f282227fb606::t_3c1e4706b2af8d 22-27,30
+  s_735be408a64636::t_7c2ab65748ca95 1-5,7-11,37-116
+  s_a5f282227fb606::t_61db9c581377fa 6,12-21,28-29,31-36
+internal/domain/tools/catalog_test.go
+  s_735be408a64636::t_0118106d110c12 1-6,8-57
+  s_735be408a64636::t_c31b62ece21c56 7
+internal/domain/tools/catalog.go
+  s_735be408a64636::t_8c752fd605b6c0 1-33
+internal/domain/tools/doc.go
+  s_735be408a64636::t_8c752fd605b6c0 1-5
+internal/core/tool/tool_test.go
+  s_a5f282227fb606::t_4d074e2ee5d346 16,24,27
+  s_a5f282227fb606::t_3c1e4706b2af8d 17-23,25-26
+internal/core/tool/types.go
+  s_a5f282227fb606::t_48fcfd14520811 27,30-31,33-36
+  s_a5f282227fb606::t_6824b7f6089066 5-26
+internal/domain/tools/options.go
+  s_735be408a64636::t_8c752fd605b6c0 1-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "992b9cd76168ad14a5c009b5a4c0d9d9d01b39be",
+  "prompts": {},
+  "sessions": {
+    "s_735be408a64636": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f306c-e27f-71d1-b0d5-e5abc482b074",
+        "model": "gpt-5.5"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    },
+    "s_a5f282227fb606": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f13c4-cb77-7061-8d78-bfdb2b2034a3",
+        "model": "gpt-5.5"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
