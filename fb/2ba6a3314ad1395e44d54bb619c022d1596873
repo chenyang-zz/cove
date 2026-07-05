@@ -1,0 +1,52 @@
+internal/worker/tasks/parse_document.go
+  s_735be408a64636::t_19dc937a460f1e 258,261
+internal/domain/tools/time.go
+  s_735be408a64636::t_89a7e96a511d26 19,26
+internal/logic/document/search_documents.go
+  s_735be408a64636::t_b008ed245a5afd 74
+internal/util/context_test.go
+  s_735be408a64636::t_cd2cb0623c5a07 5,34-59
+internal/domain/tools/time_test.go
+  s_735be408a64636::t_424daf166aa0ea 27
+internal/domain/tools/knowledge_test.go
+  s_735be408a64636::t_22d030f4f413ed 1-42,45-55,57-90,188-246,251-260,262-279,291-365,412-413,429,440-441,449-457,465-466,471-525
+  s_735be408a64636::t_647cbf1f670d04 43-44,56,91-187,247-250,261,280-290,366-411,414-428,430-439,442-448,458-464,467-470
+internal/util/context.go
+  s_735be408a64636::t_9ef32b4e2b82a4 11,32-82
+internal/domain/tools/catalog_test.go
+  s_735be408a64636::t_2681eec015bb0c 6,11,16-24,27,40-42,52,100
+  s_735be408a64636::t_f587d4f6129c95 12-13,71-99
+internal/domain/tools/catalog.go
+  s_735be408a64636::t_55518094c9dd6d 14-15,18-19
+  s_735be408a64636::t_c9331b59d0ba70 34,42
+  s_735be408a64636::t_f341275c4d76c0 8,24-29,40-41,43-47
+internal/domain/tools/knowledge.go
+  s_735be408a64636::t_cbbad85a7b6225 10,13-14,24-25,35-37,51-58,125,128,147,267-280,284,338-339,341-351,353-358,360-365,367-383,385-405,407,409-420,422-522
+  s_735be408a64636::t_b637be74328bb1 62,69,73,79
+  s_735be408a64636::t_0612d8c23fb7a1 1-9,11-12,15-23,26-34,38-50,59-61,63-68,70-72,74-78,80-101,103-124,126-127,129-146,148-149,151-159,161-266,281-282,285-337,523-543
+  s_735be408a64636::t_c5b0a51e0bf43b 283
+  h_e1f1392360ad67 102,150,160,340,352,359,366,384,406,408,421
+internal/svc/model_client.go
+  s_735be408a64636::t_ae3218cbbc45b7 1-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "fb2ba6a3314ad1395e44d54bb619c022d1596873",
+  "prompts": {},
+  "humans": {
+    "h_e1f1392360ad67": {
+      "author": "chenyang <904852749@qq.com>"
+    }
+  },
+  "sessions": {
+    "s_735be408a64636": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f306c-e27f-71d1-b0d5-e5abc482b074",
+        "model": "gpt-5.5"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
