@@ -1,0 +1,28 @@
+internal/domain/tools/builtin/time_test.go
+  s_735be408a64636::t_cf7cec88267113 15,42,44,65,67,87,89
+internal/domain/tools/builtin/time.go
+  s_735be408a64636::t_cf7cec88267113 17-18,39
+  s_735be408a64636::t_3d4d793459bed2 16
+internal/domain/tools/builtin/knowledge_test.go
+  s_735be408a64636::t_3d4d793459bed2 25,60,115,146,171,192,220,225,240
+internal/domain/tools/builtin/knowledge.go
+  s_735be408a64636::t_3d4d793459bed2 59-60
+internal/domain/tools/catalog.go
+  s_735be408a64636::t_cf7cec88267113 4-6,14,16,28-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "41745987d0037fc4e7b75dbccc892c18eda141de",
+  "prompts": {},
+  "sessions": {
+    "s_735be408a64636": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f306c-e27f-71d1-b0d5-e5abc482b074",
+        "model": "gpt-5.5"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
