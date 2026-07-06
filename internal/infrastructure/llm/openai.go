@@ -2,15 +2,18 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	corellm "github.com/boxify/api-go/internal/core/llm"
+	coretool "github.com/boxify/api-go/internal/core/tool"
 	"github.com/boxify/api-go/internal/xerr"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/shared"
 )
 
 const defaultOpenAIBaseURL = "https://api.openai.com/v1"
@@ -98,17 +101,39 @@ func NewOpenaiLLMClient(apiKey string, model string, opts ...OpenAIOption) corel
 }
 
 func (c *openaiLLMClient) Invoke(ctx context.Context, messages []*corellm.Message, opts ...corellm.ModelCallOption) (string, error) {
-	if err := c.validateChatConfig(); err != nil {
+	result, err := c.InvokeResult(ctx, messages, opts...)
+	if err != nil {
 		return "", err
+	}
+	return result.Text, nil
+}
+
+func (c *openaiLLMClient) InvokeResult(ctx context.Context, messages []*corellm.Message, opts ...corellm.ModelCallOption) (*corellm.LLMResult, error) {
+	if err := c.validateChatConfig(); err != nil {
+		return nil, err
 	}
 	resp, err := c.client.Chat.Completions.New(ctx, c.chatParams(messages, opts...))
 	if err != nil {
-		return "", xerr.Wrapf(err, "请求模型接口失败")
+		return nil, xerr.Wrapf(err, "请求模型接口失败")
 	}
 	if resp == nil || len(resp.Choices) == 0 {
-		return "", xerr.Internal("模型返回为空", nil)
+		return nil, xerr.Internal("模型返回为空", nil)
 	}
-	return resp.Choices[0].Message.Content, nil
+	choice := resp.Choices[0]
+	return &corellm.LLMResult{
+		Text:       choice.Message.Content,
+		ToolCalls:  openAIToolCalls(choice.Message.ToolCalls),
+		Model:      resp.Model,
+		Provider:   "openai",
+		ID:         resp.ID,
+		StopReason: choice.FinishReason,
+		Usage: corellm.TokenUsage{
+			InputTokens:  resp.Usage.PromptTokens,
+			OutputTokens: resp.Usage.CompletionTokens,
+			TotalTokens:  resp.Usage.TotalTokens,
+		},
+		RawJSON: resp.RawJSON(),
+	}, nil
 }
 
 func (c *openaiLLMClient) Stream(ctx context.Context, messages []*corellm.Message, opts ...corellm.ModelCallOption) (<-chan string, error) {
@@ -154,10 +179,111 @@ func (c *openaiLLMClient) chatParams(messages []*corellm.Message, opts ...corell
 	if chatOpts.Temperature != nil {
 		params.Temperature = openai.Float(*chatOpts.Temperature)
 	}
+	if chatOpts.TopP != nil {
+		params.TopP = openai.Float(*chatOpts.TopP)
+	}
 	if chatOpts.MaxTokens != nil {
 		params.MaxTokens = openai.Int(*chatOpts.MaxTokens)
 	}
+	params.Tools = toOpenAITools(chatOpts.Tools)
+	params.ToolChoice = toOpenAIToolChoice(chatOpts.ToolChoice)
 	return params
+}
+
+func toOpenAITools(tools []coretool.Descriptor) []openai.ChatCompletionToolUnionParam {
+	if len(tools) == 0 {
+		return nil
+	}
+	out := make([]openai.ChatCompletionToolUnionParam, 0, len(tools))
+	for _, item := range tools {
+		if strings.TrimSpace(item.Name) == "" {
+			continue
+		}
+		function := shared.FunctionDefinitionParam{
+			Name:        strings.TrimSpace(item.Name),
+			Description: openai.String(item.Description),
+			Parameters:  shared.FunctionParameters(toolParameters(item.Schema.Parameters)),
+		}
+		if item.Schema.Strict != nil {
+			function.Strict = openai.Bool(*item.Schema.Strict)
+		}
+		out = append(out, openai.ChatCompletionToolUnionParam{
+			OfFunction: &openai.ChatCompletionFunctionToolParam{Function: function},
+		})
+	}
+	return out
+}
+
+func toOpenAIToolChoice(choice *corellm.ToolChoice) openai.ChatCompletionToolChoiceOptionUnionParam {
+	if choice == nil {
+		return openai.ChatCompletionToolChoiceOptionUnionParam{}
+	}
+	switch choice.Mode {
+	case corellm.ToolChoiceAuto:
+		return openai.ChatCompletionToolChoiceOptionUnionParam{OfAuto: openai.String(string(openai.ChatCompletionToolChoiceOptionAutoAuto))}
+	case corellm.ToolChoiceNone:
+		return openai.ChatCompletionToolChoiceOptionUnionParam{OfAuto: openai.String(string(openai.ChatCompletionToolChoiceOptionAutoNone))}
+	case corellm.ToolChoiceRequired:
+		return openai.ChatCompletionToolChoiceOptionUnionParam{OfAuto: openai.String(string(openai.ChatCompletionToolChoiceOptionAutoRequired))}
+	case corellm.ToolChoiceTool:
+		if strings.TrimSpace(choice.Name) == "" {
+			return openai.ChatCompletionToolChoiceOptionUnionParam{}
+		}
+		return openai.ToolChoiceOptionFunctionToolChoice(openai.ChatCompletionNamedToolChoiceFunctionParam{Name: strings.TrimSpace(choice.Name)})
+	default:
+		return openai.ChatCompletionToolChoiceOptionUnionParam{}
+	}
+}
+
+func openAIToolCalls(calls []openai.ChatCompletionMessageToolCallUnion) []corellm.LLMToolCall {
+	if len(calls) == 0 {
+		return nil
+	}
+	out := make([]corellm.LLMToolCall, 0, len(calls))
+	for _, call := range calls {
+		if call.Type != "function" {
+			continue
+		}
+		function := call.AsFunction()
+		rawInput := function.Function.Arguments
+		out = append(out, corellm.LLMToolCall{
+			ID:       function.ID,
+			Name:     function.Function.Name,
+			Input:    parseToolInput(rawInput),
+			RawInput: rawInput,
+		})
+	}
+	return out
+}
+
+func toolParameters(schema coretool.ParametersSchema) map[string]any {
+	params := map[string]any{
+		"type": "object",
+	}
+	if schema.Type != "" {
+		params["type"] = schema.Type
+	}
+	if len(schema.Properties) > 0 {
+		params["properties"] = schema.Properties
+	}
+	if len(schema.Required) > 0 {
+		params["required"] = schema.Required
+	}
+	if schema.AdditionalProperties != nil {
+		params["additionalProperties"] = schema.AdditionalProperties
+	}
+	return params
+}
+
+func parseToolInput(raw string) coretool.Input {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	var input map[string]any
+	if err := json.Unmarshal([]byte(raw), &input); err != nil {
+		return nil
+	}
+	return coretool.Input(input)
 }
 
 func (c *openaiLLMClient) Embed(ctx context.Context, texts []string, dimensions int, opts ...corellm.EmbeddingOption) ([][]float64, error) {

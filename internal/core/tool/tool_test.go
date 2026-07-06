@@ -56,6 +56,76 @@ func TestFuncToolDescribesAndInvokes(t *testing.T) {
 	}
 }
 
+// 验证点：CloneDescriptor 应复制 schema、required、annotations 和 strict 指针，避免调用方修改原始描述污染副本。
+func TestCloneDescriptorReturnsIndependentCopy(t *testing.T) {
+	strict := true
+	original := Descriptor{
+		Name:        "search",
+		Description: "Search documents.",
+		Schema: Schema{
+			Parameters: ParametersSchema{
+				Type: "object",
+				Properties: map[string]PropertySchema{
+					"query": {"type": "string"},
+				},
+				Required:             []string{"query"},
+				AdditionalProperties: map[string]any{"type": "never"},
+			},
+			Strict: &strict,
+		},
+		Annotations: map[string]any{"scope": "rag"},
+	}
+
+	cloned := CloneDescriptor(original)
+	original.Schema.Parameters.Properties["query"]["type"] = "number"
+	original.Schema.Parameters.Required[0] = "changed"
+	original.Schema.Parameters.AdditionalProperties.(map[string]any)["type"] = "changed"
+	original.Annotations["scope"] = "changed"
+	*original.Schema.Strict = false
+
+	if cloned.Schema.Parameters.Properties["query"]["type"] != "string" {
+		t.Fatalf("CloneDescriptor().Schema.Parameters.Properties[query][type] = %#v, want string", cloned.Schema.Parameters.Properties["query"]["type"])
+	}
+	if cloned.Schema.Parameters.Required[0] != "query" {
+		t.Fatalf("CloneDescriptor().Schema.Parameters.Required[0] = %q, want query", cloned.Schema.Parameters.Required[0])
+	}
+	if cloned.Schema.Parameters.AdditionalProperties.(map[string]any)["type"] != "never" {
+		t.Fatalf("CloneDescriptor().Schema.Parameters.AdditionalProperties[type] = %#v, want never", cloned.Schema.Parameters.AdditionalProperties.(map[string]any)["type"])
+	}
+	if cloned.Annotations["scope"] != "rag" {
+		t.Fatalf("CloneDescriptor().Annotations[scope] = %#v, want rag", cloned.Annotations["scope"])
+	}
+	if cloned.Schema.Strict == original.Schema.Strict || cloned.Schema.Strict == nil || !*cloned.Schema.Strict {
+		t.Fatalf("CloneDescriptor().Schema.Strict = %#v, want independent true pointer", cloned.Schema.Strict)
+	}
+}
+
+// 验证点：CloneDescriptors 应返回独立切片，并逐个复制 descriptor 内部字段。
+func TestCloneDescriptorsReturnsIndependentSlice(t *testing.T) {
+	original := []Descriptor{
+		{
+			Name: "alpha",
+			Schema: Schema{Parameters: ParametersSchema{
+				Properties: map[string]PropertySchema{"query": {"type": "string"}},
+			}},
+		},
+	}
+
+	cloned := CloneDescriptors(original)
+	original[0].Name = "changed"
+	original[0].Schema.Parameters.Properties["query"]["type"] = "number"
+
+	if len(cloned) != 1 {
+		t.Fatalf("CloneDescriptors() len = %d, want 1", len(cloned))
+	}
+	if cloned[0].Name != "alpha" {
+		t.Fatalf("CloneDescriptors()[0].Name = %q, want alpha", cloned[0].Name)
+	}
+	if cloned[0].Schema.Parameters.Properties["query"]["type"] != "string" {
+		t.Fatalf("CloneDescriptors()[0].Schema.Parameters.Properties[query][type] = %#v, want string", cloned[0].Schema.Parameters.Properties["query"]["type"])
+	}
+}
+
 // 验证点：注册表应拒绝 nil 工具、空名称工具和重复名称工具，避免运行期歧义。
 func TestRegistryRejectsInvalidTools(t *testing.T) {
 	ctx := context.Background()

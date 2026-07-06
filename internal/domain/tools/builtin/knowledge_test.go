@@ -451,6 +451,14 @@ func (fakeKnowledgeToolLLM) Invoke(ctx context.Context, messages []*corellm.Mess
 	return "", nil
 }
 
+func (c fakeKnowledgeToolLLM) InvokeResult(ctx context.Context, messages []*corellm.Message, opts ...corellm.ModelCallOption) (*corellm.LLMResult, error) {
+	text, err := c.Invoke(ctx, messages, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &corellm.LLMResult{Text: text}, nil
+}
+
 func (fakeKnowledgeToolLLM) Stream(ctx context.Context, messages []*corellm.Message, opts ...corellm.ModelCallOption) (<-chan string, error) {
 	return nil, nil
 }

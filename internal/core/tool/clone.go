@@ -1,9 +1,31 @@
 package tool
 
-func cloneDescriptor(descriptor Descriptor) Descriptor {
+// CloneDescriptor 返回工具描述的独立副本。
+//
+// 该函数会复制 schema、required、annotations 和 strict 指针，调用方后续修改原始
+// descriptor 不会影响副本。嵌套的任意值只做浅拷贝，适合当前 JSON schema 投影使用。
+func CloneDescriptor(descriptor Descriptor) Descriptor {
 	descriptor.Schema = cloneSchema(descriptor.Schema)
 	descriptor.Annotations = cloneMap(descriptor.Annotations)
 	return descriptor
+}
+
+// CloneDescriptors 返回工具描述列表的独立副本。
+//
+// nil 输入会返回 nil；非 nil 输入会返回新的切片，并逐个调用 CloneDescriptor 复制元素。
+func CloneDescriptors(descriptors []Descriptor) []Descriptor {
+	if descriptors == nil {
+		return nil
+	}
+	cloned := make([]Descriptor, len(descriptors))
+	for i, descriptor := range descriptors {
+		cloned[i] = CloneDescriptor(descriptor)
+	}
+	return cloned
+}
+
+func cloneDescriptor(descriptor Descriptor) Descriptor {
+	return CloneDescriptor(descriptor)
 }
 
 func cloneSchema(schema Schema) Schema {

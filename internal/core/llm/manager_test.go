@@ -22,6 +22,14 @@ func (stubClient) Invoke(context.Context, []*Message, ...ModelCallOption) (strin
 	return "", nil
 }
 
+func (stubClient) InvokeResult(ctx context.Context, messages []*Message, opts ...ModelCallOption) (*LLMResult, error) {
+	text, err := stubClient{}.Invoke(ctx, messages, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &LLMResult{Text: text}, nil
+}
+
 func (stubClient) Stream(context.Context, []*Message, ...ModelCallOption) (<-chan string, error) {
 	ch := make(chan string)
 	close(ch)

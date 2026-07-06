@@ -313,6 +313,14 @@ func (f *fakeAgentLLM) Invoke(ctx context.Context, messages []*llm.Message, opts
 	return out, nil
 }
 
+func (f *fakeAgentLLM) InvokeResult(ctx context.Context, messages []*llm.Message, opts ...llm.ModelCallOption) (*llm.LLMResult, error) {
+	text, err := f.Invoke(ctx, messages, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &llm.LLMResult{Text: text}, nil
+}
+
 func (f *fakeAgentLLM) Stream(ctx context.Context, messages []*llm.Message, opts ...llm.ModelCallOption) (<-chan string, error) {
 	return nil, errors.New("not implemented")
 }

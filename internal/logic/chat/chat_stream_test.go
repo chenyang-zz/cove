@@ -262,6 +262,14 @@ func (c *fakeChatLLMClient) Invoke(ctx context.Context, messages []*corellm.Mess
 	return resp.text, resp.err
 }
 
+func (c *fakeChatLLMClient) InvokeResult(ctx context.Context, messages []*corellm.Message, opts ...corellm.ModelCallOption) (*corellm.LLMResult, error) {
+	text, err := c.Invoke(ctx, messages, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &corellm.LLMResult{Text: text}, nil
+}
+
 func (c *fakeChatLLMClient) Stream(ctx context.Context, messages []*corellm.Message, opts ...corellm.ModelCallOption) (<-chan string, error) {
 	ch := make(chan string)
 	close(ch)

@@ -9,6 +9,7 @@ import (
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
 	corellm "github.com/boxify/api-go/internal/core/llm"
+	coretool "github.com/boxify/api-go/internal/core/tool"
 	"github.com/boxify/api-go/internal/xerr"
 )
 
@@ -85,26 +86,63 @@ func NewAnthropicLLMClient(apiKey string, model string, opts ...AnthropicOption)
 }
 
 func (c *anthropicLLMClient) Invoke(ctx context.Context, messages []*corellm.Message, opts ...corellm.ModelCallOption) (string, error) {
-	if err := c.validateChatConfig(); err != nil {
+	result, err := c.InvokeResult(ctx, messages, opts...)
+	if err != nil {
 		return "", err
+	}
+	return result.Text, nil
+}
+
+func (c *anthropicLLMClient) InvokeResult(ctx context.Context, messages []*corellm.Message, opts ...corellm.ModelCallOption) (*corellm.LLMResult, error) {
+	if err := c.validateChatConfig(); err != nil {
+		return nil, err
 	}
 	resp, err := c.client.Messages.New(ctx, c.messageParams(messages, opts...))
 	if err != nil {
-		return "", xerr.Wrapf(err, "请求模型接口失败")
+		return nil, xerr.Wrapf(err, "请求模型接口失败")
 	}
 	if resp == nil || len(resp.Content) == 0 {
-		return "", xerr.Internal("模型返回为空", nil)
+		return nil, xerr.Internal("模型返回为空", nil)
 	}
 	var out strings.Builder
+	toolCalls := make([]corellm.LLMToolCall, 0)
 	for _, block := range resp.Content {
-		if block.Text != "" {
-			out.WriteString(block.Text)
+		switch block.Type {
+		case "text":
+			if block.Text != "" {
+				out.WriteString(block.Text)
+			}
+		case "tool_use":
+			toolUse := block.AsToolUse()
+			rawInput := string(toolUse.Input)
+			toolCalls = append(toolCalls, corellm.LLMToolCall{
+				ID:       toolUse.ID,
+				Name:     toolUse.Name,
+				Input:    parseToolInput(rawInput),
+				RawInput: rawInput,
+			})
 		}
 	}
-	if out.Len() == 0 {
-		return "", xerr.Internal("模型返回为空", nil)
+	if out.Len() == 0 && len(toolCalls) == 0 {
+		return nil, xerr.Internal("模型返回为空", nil)
 	}
-	return out.String(), nil
+	usage := corellm.TokenUsage{
+		InputTokens:              resp.Usage.InputTokens,
+		OutputTokens:             resp.Usage.OutputTokens,
+		CacheCreationInputTokens: resp.Usage.CacheCreationInputTokens,
+		CacheReadInputTokens:     resp.Usage.CacheReadInputTokens,
+	}
+	usage.TotalTokens = usage.InputTokens + usage.OutputTokens + usage.CacheCreationInputTokens + usage.CacheReadInputTokens
+	return &corellm.LLMResult{
+		Text:       out.String(),
+		ToolCalls:  toolCalls,
+		Model:      string(resp.Model),
+		Provider:   "anthropic",
+		ID:         resp.ID,
+		StopReason: string(resp.StopReason),
+		Usage:      usage,
+		RawJSON:    resp.RawJSON(),
+	}, nil
 }
 
 func (c *anthropicLLMClient) Stream(ctx context.Context, messages []*corellm.Message, opts ...corellm.ModelCallOption) (<-chan string, error) {
@@ -154,11 +192,78 @@ func (c *anthropicLLMClient) messageParams(messages []*corellm.Message, opts ...
 	if chatOpts.Temperature != nil {
 		params.Temperature = anthropic.Float(*chatOpts.Temperature)
 	}
+	if chatOpts.TopP != nil {
+		params.TopP = anthropic.Float(*chatOpts.TopP)
+	}
 	if chatOpts.MaxTokens != nil && *chatOpts.MaxTokens > 0 {
 		params.MaxTokens = *chatOpts.MaxTokens
 	}
+	params.Tools = toAnthropicTools(chatOpts.Tools)
+	params.ToolChoice = toAnthropicToolChoice(chatOpts.ToolChoice)
 	params.Messages, params.System = toAnthropicMessages(messages)
 	return params
+}
+
+func toAnthropicTools(tools []coretool.Descriptor) []anthropic.ToolUnionParam {
+	if len(tools) == 0 {
+		return nil
+	}
+	out := make([]anthropic.ToolUnionParam, 0, len(tools))
+	for _, item := range tools {
+		if strings.TrimSpace(item.Name) == "" {
+			continue
+		}
+		toolParam := anthropic.ToolParam{
+			Name:        strings.TrimSpace(item.Name),
+			Description: anthropic.String(item.Description),
+			InputSchema: anthropic.ToolInputSchemaParam{
+				Properties:  item.Schema.Parameters.Properties,
+				Required:    item.Schema.Parameters.Required,
+				ExtraFields: anthropicSchemaExtraFields(item.Schema.Parameters),
+			},
+		}
+		if item.Schema.Strict != nil {
+			toolParam.Strict = anthropic.Bool(*item.Schema.Strict)
+		}
+		out = append(out, anthropic.ToolUnionParam{OfTool: &toolParam})
+	}
+	return out
+}
+
+func toAnthropicToolChoice(choice *corellm.ToolChoice) anthropic.ToolChoiceUnionParam {
+	if choice == nil {
+		return anthropic.ToolChoiceUnionParam{}
+	}
+	switch choice.Mode {
+	case corellm.ToolChoiceAuto:
+		return anthropic.ToolChoiceUnionParam{OfAuto: &anthropic.ToolChoiceAutoParam{}}
+	case corellm.ToolChoiceNone:
+		none := anthropic.NewToolChoiceNoneParam()
+		return anthropic.ToolChoiceUnionParam{OfNone: &none}
+	case corellm.ToolChoiceRequired:
+		return anthropic.ToolChoiceUnionParam{OfAny: &anthropic.ToolChoiceAnyParam{}}
+	case corellm.ToolChoiceTool:
+		if strings.TrimSpace(choice.Name) == "" {
+			return anthropic.ToolChoiceUnionParam{}
+		}
+		return anthropic.ToolChoiceParamOfTool(strings.TrimSpace(choice.Name))
+	default:
+		return anthropic.ToolChoiceUnionParam{}
+	}
+}
+
+func anthropicSchemaExtraFields(schema coretool.ParametersSchema) map[string]any {
+	extra := map[string]any{}
+	if schema.Type != "" && schema.Type != "object" {
+		extra["type"] = schema.Type
+	}
+	if schema.AdditionalProperties != nil {
+		extra["additionalProperties"] = schema.AdditionalProperties
+	}
+	if len(extra) == 0 {
+		return nil
+	}
+	return extra
 }
 
 func (c *anthropicLLMClient) validateChatConfig() error {

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	corellm "github.com/boxify/api-go/internal/core/llm"
+	coretool "github.com/boxify/api-go/internal/core/tool"
 	infra "github.com/boxify/api-go/internal/infrastructure/llm"
 )
 
@@ -59,6 +60,7 @@ func TestOpenAIClientInvokeSendsChatCompletionRequest(t *testing.T) {
 	}
 }
 
+// 验证 OpenAI Invoke 会发送可选聊天参数。
 func TestOpenAIClientInvokeSendsOptionalChatParams(t *testing.T) {
 	var requestBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -74,11 +76,12 @@ func TestOpenAIClientInvokeSendsOptionalChatParams(t *testing.T) {
 	if _, err := client.Invoke(context.Background(),
 		[]*corellm.Message{{Role: corellm.UserRole, Content: "ping"}},
 		corellm.WithTemperature(0.7),
+		corellm.WithTopP(0.8),
 		corellm.WithMaxTokens(128),
 	); err != nil {
 		t.Fatalf("Invoke error = %v", err)
 	}
-	if requestBody["temperature"] != float64(0.7) || requestBody["max_tokens"] != float64(128) {
+	if requestBody["temperature"] != float64(0.7) || requestBody["top_p"] != float64(0.8) || requestBody["max_tokens"] != float64(128) {
 		t.Fatalf("request body = %#v", requestBody)
 	}
 }
@@ -133,6 +136,86 @@ func TestOpenAIClientInvokeTemperatureOptionOverridesDefault(t *testing.T) {
 	}
 }
 
+// 验证 OpenAI InvokeResult 会发送工具参数，并映射文本、工具调用、停止原因和 token 用量。
+func TestOpenAIClientInvokeResultMapsRichResponse(t *testing.T) {
+	var requestBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"chatcmpl_123",
+			"model":"chat-model",
+			"choices":[{
+				"finish_reason":"tool_calls",
+				"message":{
+					"content":"need tool",
+					"tool_calls":[
+						{"id":"call_1","type":"function","function":{"name":"search","arguments":"{\"query\":\"golang\"}"}},
+						{"id":"call_bad","type":"function","function":{"name":"bad","arguments":"not-json"}}
+					]
+				}
+			}],
+			"usage":{"prompt_tokens":3,"completion_tokens":5,"total_tokens":8}
+		}`))
+	}))
+	defer server.Close()
+
+	client := infra.NewOpenaiLLMClient("sk-test", "chat-model", infra.WithBaseURL(server.URL+"/v1"))
+	strict := true
+	result, err := client.InvokeResult(context.Background(),
+		[]*corellm.Message{{Role: corellm.UserRole, Content: "ping"}},
+		corellm.WithTopP(0.8),
+		corellm.WithTools(coretool.Descriptor{
+			Name:        "search",
+			Description: "search docs",
+			Schema: coretool.Schema{Strict: &strict, Parameters: coretool.ParametersSchema{
+				Type: "object",
+				Properties: map[string]coretool.PropertySchema{
+					"query": {"type": "string"},
+				},
+				Required:             []string{"query"},
+				AdditionalProperties: false,
+			}},
+		}),
+		corellm.WithRequiredTool("search"),
+	)
+	if err != nil {
+		t.Fatalf("InvokeResult error = %v, want nil", err)
+	}
+	if requestBody["top_p"] != float64(0.8) {
+		t.Fatalf("request top_p = %#v, want 0.8; body=%#v", requestBody["top_p"], requestBody)
+	}
+	tools, ok := requestBody["tools"].([]any)
+	if !ok || len(tools) != 1 {
+		t.Fatalf("request tools = %#v, want one tool", requestBody["tools"])
+	}
+	function := tools[0].(map[string]any)["function"].(map[string]any)
+	if function["name"] != "search" || function["strict"] != true {
+		t.Fatalf("request function = %#v, want search strict function", function)
+	}
+	toolChoice := requestBody["tool_choice"].(map[string]any)
+	if toolChoice["type"] != "function" || toolChoice["function"].(map[string]any)["name"] != "search" {
+		t.Fatalf("request tool_choice = %#v, want required search tool", toolChoice)
+	}
+	if result.Text != "need tool" || result.ID != "chatcmpl_123" || result.Model != "chat-model" || result.Provider != "openai" || result.StopReason != "tool_calls" {
+		t.Fatalf("InvokeResult metadata = %#v, want mapped OpenAI fields", result)
+	}
+	if result.Usage.InputTokens != 3 || result.Usage.OutputTokens != 5 || result.Usage.TotalTokens != 8 {
+		t.Fatalf("InvokeResult usage = %#v, want 3/5/8", result.Usage)
+	}
+	if len(result.ToolCalls) != 2 || result.ToolCalls[0].Name != "search" || result.ToolCalls[0].Input["query"] != "golang" {
+		t.Fatalf("InvokeResult tool calls = %#v, want parsed search call", result.ToolCalls)
+	}
+	if result.ToolCalls[1].RawInput != "not-json" || result.ToolCalls[1].Input != nil {
+		t.Fatalf("InvokeResult invalid tool input = %#v, want raw preserved and nil parsed input", result.ToolCalls[1])
+	}
+	if !strings.Contains(result.RawJSON, "chatcmpl_123") {
+		t.Fatalf("InvokeResult RawJSON = %q, want original response", result.RawJSON)
+	}
+}
+
 func TestOpenAIClientStreamReadsSSEDeltaContent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -156,6 +239,7 @@ func TestOpenAIClientStreamReadsSSEDeltaContent(t *testing.T) {
 	}
 }
 
+// 验证 OpenAI Stream 会发送可选聊天参数。
 func TestOpenAIClientStreamSendsOptionalChatParams(t *testing.T) {
 	var requestBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -174,6 +258,7 @@ func TestOpenAIClientStreamSendsOptionalChatParams(t *testing.T) {
 	stream, err := client.Stream(context.Background(),
 		[]*corellm.Message{{Role: corellm.UserRole, Content: "say"}},
 		corellm.WithTemperature(0.2),
+		corellm.WithTopP(0.9),
 		corellm.WithMaxTokens(64),
 	)
 	if err != nil {
@@ -181,7 +266,7 @@ func TestOpenAIClientStreamSendsOptionalChatParams(t *testing.T) {
 	}
 	for range stream {
 	}
-	if requestBody["temperature"] != float64(0.2) || requestBody["max_tokens"] != float64(64) {
+	if requestBody["temperature"] != float64(0.2) || requestBody["top_p"] != float64(0.9) || requestBody["max_tokens"] != float64(64) {
 		t.Fatalf("request body = %#v", requestBody)
 	}
 	if requestBody["stream"] != true {

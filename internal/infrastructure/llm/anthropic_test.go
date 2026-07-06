@@ -9,9 +9,11 @@ import (
 	"testing"
 
 	corellm "github.com/boxify/api-go/internal/core/llm"
+	coretool "github.com/boxify/api-go/internal/core/tool"
 	infra "github.com/boxify/api-go/internal/infrastructure/llm"
 )
 
+// 验证 Anthropic Invoke 会发送基础 Messages 请求并返回拼接文本。
 func TestAnthropicClientInvokeSendsMessagesRequest(t *testing.T) {
 	var authHeader string
 	var path string
@@ -69,6 +71,82 @@ func TestAnthropicClientInvokeSendsMessagesRequest(t *testing.T) {
 	}
 }
 
+// 验证 Anthropic InvokeResult 会发送工具参数，并映射文本、工具调用、停止原因和 token 用量。
+func TestAnthropicClientInvokeResultMapsRichResponse(t *testing.T) {
+	var requestBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"msg_123",
+			"type":"message",
+			"role":"assistant",
+			"model":"claude-sonnet-4-5",
+			"content":[
+				{"type":"text","text":"need tool"},
+				{"type":"tool_use","id":"toolu_1","name":"search","input":{"query":"golang"}}
+			],
+			"stop_reason":"tool_use",
+			"stop_sequence":null,
+			"usage":{"input_tokens":3,"output_tokens":5,"cache_creation_input_tokens":2,"cache_read_input_tokens":1}
+		}`))
+	}))
+	defer server.Close()
+
+	client := infra.NewAnthropicLLMClient("sk-ant", "claude-sonnet-4-5", infra.WithAnthropicBaseURL(server.URL))
+	strict := true
+	result, err := client.InvokeResult(context.Background(),
+		[]*corellm.Message{corellm.UserMessage("ping")},
+		corellm.WithTopP(0.8),
+		corellm.WithTools(coretool.Descriptor{
+			Name:        "search",
+			Description: "search docs",
+			Schema: coretool.Schema{Strict: &strict, Parameters: coretool.ParametersSchema{
+				Type: "object",
+				Properties: map[string]coretool.PropertySchema{
+					"query": {"type": "string"},
+				},
+				Required:             []string{"query"},
+				AdditionalProperties: false,
+			}},
+		}),
+		corellm.WithRequiredTool("search"),
+	)
+	if err != nil {
+		t.Fatalf("InvokeResult error = %v, want nil", err)
+	}
+	if requestBody["top_p"] != float64(0.8) {
+		t.Fatalf("request top_p = %#v, want 0.8; body=%#v", requestBody["top_p"], requestBody)
+	}
+	tools, ok := requestBody["tools"].([]any)
+	if !ok || len(tools) != 1 {
+		t.Fatalf("request tools = %#v, want one tool", requestBody["tools"])
+	}
+	tool := tools[0].(map[string]any)
+	if tool["name"] != "search" || tool["strict"] != true {
+		t.Fatalf("request tool = %#v, want search strict tool", tool)
+	}
+	toolChoice := requestBody["tool_choice"].(map[string]any)
+	if toolChoice["type"] != "tool" || toolChoice["name"] != "search" {
+		t.Fatalf("request tool_choice = %#v, want search tool choice", toolChoice)
+	}
+	if result.Text != "need tool" || result.ID != "msg_123" || result.Model != "claude-sonnet-4-5" || result.Provider != "anthropic" || result.StopReason != "tool_use" {
+		t.Fatalf("InvokeResult metadata = %#v, want mapped Anthropic fields", result)
+	}
+	if result.Usage.InputTokens != 3 || result.Usage.OutputTokens != 5 || result.Usage.CacheCreationInputTokens != 2 || result.Usage.CacheReadInputTokens != 1 || result.Usage.TotalTokens != 11 {
+		t.Fatalf("InvokeResult usage = %#v, want total 11", result.Usage)
+	}
+	if len(result.ToolCalls) != 1 || result.ToolCalls[0].ID != "toolu_1" || result.ToolCalls[0].Name != "search" || result.ToolCalls[0].Input["query"] != "golang" {
+		t.Fatalf("InvokeResult tool calls = %#v, want parsed search call", result.ToolCalls)
+	}
+	if !strings.Contains(result.RawJSON, "msg_123") {
+		t.Fatalf("InvokeResult RawJSON = %q, want original response", result.RawJSON)
+	}
+}
+
+// 验证 Anthropic Invoke 会使用默认最大 token。
 func TestAnthropicClientInvokeUsesDefaultMaxTokens(t *testing.T) {
 	var requestBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -98,6 +176,7 @@ func TestAnthropicClientInvokeUsesDefaultMaxTokens(t *testing.T) {
 	}
 }
 
+// 验证 Anthropic Stream 会读取文本增量。
 func TestAnthropicClientStreamReadsTextDeltas(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -124,6 +203,32 @@ func TestAnthropicClientStreamReadsTextDeltas(t *testing.T) {
 	}
 }
 
+// 验证 Anthropic Stream 会透传 TopP 参数。
+func TestAnthropicClientStreamSendsTopP(t *testing.T) {
+	var requestBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: message_stop\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"message_stop\"}\n\n"))
+	}))
+	defer server.Close()
+
+	client := infra.NewAnthropicLLMClient("sk-ant", "claude-sonnet-4-5", infra.WithAnthropicBaseURL(server.URL))
+	stream, err := client.Stream(context.Background(), []*corellm.Message{corellm.UserMessage("say")}, corellm.WithTopP(0.6))
+	if err != nil {
+		t.Fatalf("Stream error = %v, want nil", err)
+	}
+	for range stream {
+	}
+	if requestBody["top_p"] != float64(0.6) {
+		t.Fatalf("request body = %#v, want top_p 0.6", requestBody)
+	}
+}
+
+// 验证 Anthropic embedding 当前仍返回不支持错误。
 func TestAnthropicClientEmbeddingUnsupported(t *testing.T) {
 	client := infra.NewAnthropicLLMClient("sk-ant", "claude-sonnet-4-5")
 	if _, err := client.Embed(context.Background(), []string{"a"}, 0); err == nil || !strings.Contains(err.Error(), "不支持向量") {
