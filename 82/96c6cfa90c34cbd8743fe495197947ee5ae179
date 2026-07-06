@@ -1,0 +1,63 @@
+internal/core/agent/types.go
+  s_a5f282227fb606::t_f4361bc1213c54 20-22,62-63,105,128,133-171
+  s_a5f282227fb606::t_b7530f65ec227e 1-3,5-19,23-51,53-61,64-98,100-104,106-120,122-127,129-132,172-174
+  s_a5f282227fb606::t_b583f81475df64 4
+  s_a5f282227fb606::t_a677cc5925b2cc 52,99,121
+internal/core/agent/hooks.go
+  s_a5f282227fb606::t_b7530f65ec227e 1-71
+internal/core/agent/parser.go
+  s_a5f282227fb606::t_b7530f65ec227e 1-82
+CLAUDE.md
+  s_a5f282227fb606::t_c6a696b1c5f3fa 4
+internal/core/agent/state.go
+  s_a5f282227fb606::t_b7530f65ec227e 1-117
+internal/core/agent/doc.go
+  s_a5f282227fb606::t_f4361bc1213c54 1-7
+internal/core/agent/planner.go
+  s_a5f282227fb606::t_35ad6b6dc508a4 1-18,20-21,26-51,53-58,60-71,73-75,77-81,89-107,109-114,116-125,127-129,131-135,140-169,171-176,178-181,183-189,191-193,202-251
+  s_a5f282227fb606::t_cb782a162cf1cb 19,23,52,59,72,76,84,108,115,126,130,138,170,177,182,190,194,197,199,201
+  s_a5f282227fb606::t_ac432a18bc22c3 22,24-25,82-83,85-88,136-137,139,195-196,198,200,252-254
+internal/core/agent/react_test.go
+  s_a5f282227fb606::t_9025347e3db2b6 173-296,326-345,418-425
+  s_a5f282227fb606::t_ee70eecc4aec5f 1-172,297-325,346-417,426-447
+internal/core/agent/options.go
+  s_a5f282227fb606::t_b7530f65ec227e 1-93,120-134
+  s_a5f282227fb606::t_10126a22ae9ecd 94-119
+internal/core/agent/orchestrator.go
+  s_a5f282227fb606::t_09abb3dffc95f6 4-5,9,15-18,20-21,25-30,33,38-40,42-43,46
+internal/core/agent/prompt.go
+  s_a5f282227fb606::t_b7530f65ec227e 1-86
+internal/core/agent/orchestrator_test.go
+  s_a5f282227fb606::t_09abb3dffc95f6 9,11-13,20,25
+internal/core/agent/agent.go
+  s_a5f282227fb606::t_b7530f65ec227e 1-11,13-18,20-24,27-28,33-46,49-54,58-60,65-92,95-96,102-105,114-118,121-129,132-171,173,175-191,212-213,215-227,229-239,241-246
+  s_a5f282227fb606::t_729811fc0dad5b 12,197,209
+  s_a5f282227fb606::t_54178ebaaa7df2 93-94,97-99,204-208,210-211
+  s_a5f282227fb606::t_b27379120f2476 19,25-26,29-32,47-48,55-57,61-64,100-101,106-113,119-120,130-131,172,174,192-196,198-203
+  h_e1f1392360ad67 214,228,240
+internal/core/agent/truncate.go
+  s_a5f282227fb606::t_b7530f65ec227e 1-12
+AGENTS.md
+  s_a5f282227fb606::t_c6a696b1c5f3fa 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8296c6cfa90c34cbd8743fe495197947ee5ae179",
+  "prompts": {},
+  "humans": {
+    "h_e1f1392360ad67": {
+      "author": "chenyang <904852749@qq.com>"
+    }
+  },
+  "sessions": {
+    "s_a5f282227fb606": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f13c4-cb77-7061-8d78-bfdb2b2034a3",
+        "model": "gpt-5.5"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
