@@ -136,7 +136,7 @@ func runDocsCommand(args []string) (Report, error) {
 	fs := flag.NewFlagSet("docs", flag.ContinueOnError)
 	root := fs.String("root", ".", "project root")
 	output := fs.String("output", defaultDocsOutput, "OpenAPI JSON output path")
-	title := fs.String("title", "Boxify API", "OpenAPI info.title")
+	title := fs.String("title", "Cove API", "OpenAPI info.title")
 	version := fs.String("version", "0.1.0", "OpenAPI info.version")
 	dryRun := fs.Bool("dry-run", false, "preview generated files without writing")
 	check := fs.Bool("check", false, "fail if generated files are out of date")

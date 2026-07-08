@@ -354,17 +354,67 @@ go test ./internal/agent/... # Agent 编排
 └── README.md
 ```
 
+## 使用示例
+
+### 注册与登录
+
+```bash
+curl -X POST http://localhost:8000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"you@example.com","password":"your-password"}'
+```
+
+```bash
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"you@example.com","password":"your-password"}'
+# → {"code":0,"data":{"token":"eyJ..."}}
+```
+
+### 流式对话
+
+登录后使用返回的 JWT 调用对话接口：
+
+```bash
+curl -N http://localhost:8000/api/chat/stream \
+  -H "Authorization: Bearer <your-jwt-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"conversation_id":"<uuid>","message":"介绍一下你自己"}'
+# → SSE 流: data: {"content":"...\n","finish":false}
+```
+
+### 文档上传
+
+```bash
+curl -X POST http://localhost:8000/api/documents \
+  -H "Authorization: Bearer <your-jwt-token>" \
+  -F "file=@/path/to/your.pdf" \
+  -F "knowledge_base_id=<uuid>"
+# → {"code":0,"data":{"id":"<uuid>","status":"processing"}}
+```
+
+> 完整 API 文档与所有路由的 request/response schema 见自动生成的 [OpenAPI 规范](docs/openapi.json)（运行时通过 `/docs` 查看 Swagger UI）。
+
+## 文档
+
+| 文档 | 说明 |
+|---|---|
+| [架构文档](docs/architecture.md) | 技术栈、分层架构、RAG 数据流、启动路径 |
+| [OpenAPI 规范](docs/openapi.json) | 自动生成的 API 参考（OpenAPI 3.0.3） |
+| [代码生成器](cmd/codegen/README.md) | codegen 工具完整使用指南 |
+| [贡献指南](CONTRIBUTING.md) | 分支命名、提交规范、PR 清单 |
+| [更新日志](CHANGELOG.md) | 版本变更记录 |
+| [安全政策](SECURITY.md) | 漏洞报告流程 |
+| [行为准则](CODE_OF_CONDUCT.md) | 社区行为准则 |
+| [许可证](LICENSE) | MIT |
+
 ## 贡献
 
-欢迎提交 Issue 和 Pull Request。在提交 PR 前请确保：
-
-- 代码通过 `go vet` 和 `gofmt` 检查
-- 新增功能附带单元测试
-- 所有测试通过 `go test ./...` |
+欢迎提交 Issue 和 Pull Request！请先阅读 [贡献指南](CONTRIBUTING.md)，了解分支命名、提交规范与 PR 清单。
 
 ## 许可证
 
-MIT © Cove Team
+[MIT](LICENSE) © Cove Team
 
 ---
 

@@ -147,7 +147,7 @@
 |---|---|---|
 | `-root` | `.` | 项目根目录 |
 | `--output` | `docs/openapi.json` | 输出路径 |
-| `--title` | `Boxify API` | `info.title` |
+| `--title` | `Cove API` | `info.title` |
 | `--version` | `0.1.0` | `info.version` |
 | `--dry-run` | `false` | 预览模式 |
 | `--check` | `false` | 过期检查模式 |

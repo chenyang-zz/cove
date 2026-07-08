@@ -46,7 +46,7 @@ func GenerateDocs(opts DocsOptions) (Report, error) {
 		opts.Output = defaultDocsOutput
 	}
 	if opts.Title == "" {
-		opts.Title = "Boxify API"
+		opts.Title = "Cove API"
 	}
 	if opts.Version == "" {
 		opts.Version = "0.1.0"

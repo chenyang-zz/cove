@@ -97,7 +97,7 @@ func registerDocsRoutes(r *gin.Engine, cfg config.DocsConfig) {
 func writeOpenAPISpec(c *gin.Context) {
 	data, err := os.ReadFile(filepath.Join("docs", "openapi.json"))
 	if err != nil {
-		data = []byte(`{"openapi":"3.0.3","info":{"title":"Boxify API","version":"0.1.0"},"paths":{}}`)
+		data = []byte(`{"openapi":"3.0.3","info":{"title":"Cove API","version":"0.1.0"},"paths":{}}`)
 	}
 	c.Data(http.StatusOK, "application/json; charset=utf-8", data)
 }
