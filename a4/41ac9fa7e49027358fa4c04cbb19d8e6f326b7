@@ -1,0 +1,23 @@
+internal/core/skill/document.go
+  s_f62bed105486b9::t_5905ae30792b11 9,92,95,98,101,104,107,128,131,134
+internal/core/valuex/values.go
+  s_f62bed105486b9::t_f681081a2fd474 5,9,21,46-95,114,127
+internal/core/valuex/values_test.go
+  s_f62bed105486b9::t_3151d2a7eaceb4 8,21,34-125,148,161
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "a441ac9fa7e49027358fa4c04cbb19d8e6f326b7",
+  "prompts": {},
+  "sessions": {
+    "s_f62bed105486b9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f475b-5fc8-7762-a05c-e940c241c69b",
+        "model": "unknown"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
