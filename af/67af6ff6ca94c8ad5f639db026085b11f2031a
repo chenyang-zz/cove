@@ -1,0 +1,31 @@
+internal/repository/mcp_server.go
+  s_a5f282227fb606::t_e3e4be19a66db8 18
+internal/repository/postgres/agent_persona.go
+  s_a5f282227fb606::t_785007ef7ad247 132
+internal/models/tag.go
+  s_b88c5c1453749a::t_7a1a2216d65707 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "af67af6ff6ca94c8ad5f639db026085b11f2031a",
+  "prompts": {},
+  "sessions": {
+    "s_a5f282227fb606": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f13c4-cb77-7061-8d78-bfdb2b2034a3",
+        "model": "unknown"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    },
+    "s_b88c5c1453749a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_b88c5c1453749a",
+        "model": "unknown"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
