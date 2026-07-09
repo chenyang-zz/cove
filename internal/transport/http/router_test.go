@@ -17,6 +17,7 @@ import (
 
 	"github.com/boxify/api-go/internal/config"
 	corellm "github.com/boxify/api-go/internal/core/llm"
+	"github.com/boxify/api-go/internal/core/prompt"
 	ragchunker "github.com/boxify/api-go/internal/core/rag/chunker"
 	ragsearch "github.com/boxify/api-go/internal/core/rag/search"
 	"github.com/boxify/api-go/internal/core/rag/webcrawl"
@@ -103,6 +104,7 @@ func newTestRouterWithConfigAndOverrides(t *testing.T, cfg config.Config, config
 		ConversationRepo:  newTestConversationRepository(),
 		MessageRepo:       newTestMessageRepository(),
 		KnowledgeBaseRepo: newTestKnowledgeBaseRepository(),
+		SkillRepo:         newTestSkillRepository(),
 		DocumentRepo:      newTestDocumentRepository(),
 		ImageRepo:         newTestImageRepository(),
 		TagRepo:           newTestTagRepository(),
@@ -114,6 +116,7 @@ func newTestRouterWithConfigAndOverrides(t *testing.T, cfg config.Config, config
 		Realtime:          testRealtimeBroker{},
 		TaskProducer:      testTaskProducer{},
 		LLMManager:        llmManager,
+		PromptManager:     prompt.NewManager("../../prompts"),
 		SecretCipher:      cipher,
 		TokenIssuer:       security.NewTokenIssuer("test-secret", time.Hour),
 	}
@@ -530,6 +533,91 @@ func (r *testKnowledgeBaseRepository) Delete(ctx context.Context, userID uuid.UU
 		}
 	}
 	return xerr.NotFound("知识库不存在")
+}
+
+type testSkillRepository struct {
+	rows []*models.Skill
+}
+
+func newTestSkillRepository() *testSkillRepository {
+	return &testSkillRepository{}
+}
+
+func (r *testSkillRepository) Create(ctx context.Context, userID uuid.UUID, row *models.Skill) (*models.Skill, error) {
+	if row.ID == uuid.Nil {
+		row.ID = uuid.New()
+	}
+	row.UserID = userID
+	r.rows = append(r.rows, row)
+	return row, nil
+}
+
+func (r *testSkillRepository) List(ctx context.Context, userID uuid.UUID) ([]*models.Skill, error) {
+	out := make([]*models.Skill, 0, len(r.rows))
+	for _, row := range r.rows {
+		if row.UserID == userID {
+			out = append(out, row)
+		}
+	}
+	return out, nil
+}
+
+func (r *testSkillRepository) FindByID(ctx context.Context, userID uuid.UUID, skillID uuid.UUID) (*models.Skill, error) {
+	for _, row := range r.rows {
+		if row.ID == skillID && row.UserID == userID {
+			return row, nil
+		}
+	}
+	return nil, xerr.NotFound("技能不存在")
+}
+
+func (r *testSkillRepository) Update(ctx context.Context, userID uuid.UUID, row *models.Skill) (*models.Skill, error) {
+	for i, existing := range r.rows {
+		if existing.ID == row.ID && existing.UserID == userID {
+			row.UserID = userID
+			r.rows[i] = row
+			return row, nil
+		}
+	}
+	return nil, xerr.NotFound("技能不存在")
+}
+
+func (r *testSkillRepository) UpdateFields(ctx context.Context, userID uuid.UUID, skillID uuid.UUID, row *models.Skill, fields *repository.SkillUpdateFields) (*models.Skill, error) {
+	existing, err := r.FindByID(ctx, userID, skillID)
+	if err != nil {
+		return nil, err
+	}
+	for _, column := range fields.Columns() {
+		switch column {
+		case "name":
+			existing.Name = row.Name
+		case "description":
+			existing.Description = row.Description
+		case "icon":
+			existing.Icon = row.Icon
+		case "prompt":
+			existing.Prompt = row.Prompt
+		case "tool_keys":
+			existing.ToolKeys = row.ToolKeys
+		case "kb_id":
+			existing.KBID = row.KBID
+		case "config":
+			existing.Config = row.Config
+		case "enabled":
+			existing.Enabled = row.Enabled
+		}
+	}
+	return existing, nil
+}
+
+func (r *testSkillRepository) Delete(ctx context.Context, userID uuid.UUID, skillID uuid.UUID) error {
+	for i, row := range r.rows {
+		if row.ID == skillID && row.UserID == userID {
+			r.rows = append(r.rows[:i], r.rows[i+1:]...)
+			return nil
+		}
+	}
+	return xerr.NotFound("技能不存在")
 }
 
 type testDocumentRepository struct {
@@ -1295,6 +1383,137 @@ func TestKnowledgeBaseListCreatesDefaultForFreshUser(t *testing.T) {
 	if got.Name != "默认知识库" || got.Description != "未分类资料默认归入此库" || got.Icon != "📚" ||
 		got.Color != "#155EEF" || !got.IsDefault || !got.ChatEnabled {
 		t.Fatalf("default knowledge base = %+v, want configured default", got)
+	}
+}
+
+// TestSkillRoutesSupportCRUDAndOptimizePrompt 验证技能 HTTP 路由支持创建、列表、标准及兼容更新、删除和提示词优化响应。
+func TestSkillRoutesSupportCRUDAndOptimizePrompt(t *testing.T) {
+	userID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	router := newTestRouterWithConfigAndOverrides(t, config.Config{}, func(svcCtx *svc.ServiceContext) {
+		encrypted, err := svcCtx.SecretCipher.Encrypt("sk-secret")
+		if err != nil {
+			t.Fatalf("encrypt api key: %v", err)
+		}
+		svcCtx.ModelConfigRepo.(*testModelConfigRepository).rows = []*models.ModelConfig{
+			{ID: uuid.New(), UserID: userID, Type: string(types.ChatModelType), Provider: "fake", ModelName: "fake-model", APIKeyEncrypted: encrypted, IsDefault: true},
+		}
+	})
+
+	create := httptest.NewRecorder()
+	createReq := httptest.NewRequest(http.MethodPost, "/api/skill/create", strings.NewReader(`{"name":"  写作技能  ","description":"说明","prompt":"帮我写","tool_keys":[" time ",""],"config":{"quick_prompt":[" 快问 "],"few_shots":[{"input":"问","output":"答"}]}}`))
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.Header.Set("Authorization", "Bearer dev-token")
+	router.ServeHTTP(create, createReq)
+	if create.Code != http.StatusOK {
+		t.Fatalf("create status = %d body=%s", create.Code, create.Body.String())
+	}
+	var createBody struct {
+		Data struct {
+			ID       string   `json:"id"`
+			Name     string   `json:"name"`
+			Icon     string   `json:"icon"`
+			KBID     *string  `json:"kb_id"`
+			ToolKeys []string `json:"tool_keys"`
+			Config   struct {
+				QuickPrompt []string `json:"quick_prompt"`
+			} `json:"config"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(create.Body.Bytes(), &createBody); err != nil {
+		t.Fatalf("unmarshal create body: %v", err)
+	}
+	if createBody.Data.ID == "" || createBody.Data.Name != "写作技能" || createBody.Data.Icon != "🧩" || createBody.Data.KBID != nil {
+		t.Fatalf("create skill body = %+v, want normalized skill", createBody.Data)
+	}
+	if !slices.Equal(createBody.Data.ToolKeys, []string{"time"}) || !slices.Equal(createBody.Data.Config.QuickPrompt, []string{"快问"}) {
+		t.Fatalf("create normalized arrays = tool_keys:%v quick_prompt:%v", createBody.Data.ToolKeys, createBody.Data.Config.QuickPrompt)
+	}
+
+	list := httptest.NewRecorder()
+	listReq := httptest.NewRequest(http.MethodGet, "/api/skill/list", nil)
+	listReq.Header.Set("Authorization", "Bearer dev-token")
+	router.ServeHTTP(list, listReq)
+	if list.Code != http.StatusOK {
+		t.Fatalf("list status = %d body=%s", list.Code, list.Body.String())
+	}
+	if !strings.Contains(list.Body.String(), createBody.Data.ID) {
+		t.Fatalf("list body = %s, want created skill id", list.Body.String())
+	}
+
+	updateByPatch := httptest.NewRecorder()
+	updateByPatchReq := httptest.NewRequest(http.MethodPatch, "/api/skill/"+createBody.Data.ID, strings.NewReader(`{"name":"PATCH 更新","enabled":false}`))
+	updateByPatchReq.Header.Set("Content-Type", "application/json")
+	updateByPatchReq.Header.Set("Authorization", "Bearer dev-token")
+	router.ServeHTTP(updateByPatch, updateByPatchReq)
+	if updateByPatch.Code != http.StatusOK {
+		t.Fatalf("patch update status = %d body=%s", updateByPatch.Code, updateByPatch.Body.String())
+	}
+	if !strings.Contains(updateByPatch.Body.String(), `"name":"PATCH 更新"`) || !strings.Contains(updateByPatch.Body.String(), `"enabled":false`) {
+		t.Fatalf("patch update body = %s, want updated name and enabled=false", updateByPatch.Body.String())
+	}
+
+	updateByCompat := httptest.NewRecorder()
+	updateByCompatReq := httptest.NewRequest(http.MethodPost, "/api/skill/"+createBody.Data.ID+"/update", strings.NewReader(`{"description":"兼容更新"}`))
+	updateByCompatReq.Header.Set("Content-Type", "application/json")
+	updateByCompatReq.Header.Set("Authorization", "Bearer dev-token")
+	router.ServeHTTP(updateByCompat, updateByCompatReq)
+	if updateByCompat.Code != http.StatusOK {
+		t.Fatalf("compat update status = %d body=%s", updateByCompat.Code, updateByCompat.Body.String())
+	}
+	if !strings.Contains(updateByCompat.Body.String(), `"description":"兼容更新"`) {
+		t.Fatalf("compat update body = %s, want updated description", updateByCompat.Body.String())
+	}
+
+	optimize := httptest.NewRecorder()
+	optimizeReq := httptest.NewRequest(http.MethodPost, "/api/skill/optimize-prompt", strings.NewReader(`{"prompt":"原始提示词"}`))
+	optimizeReq.Header.Set("Content-Type", "application/json")
+	optimizeReq.Header.Set("Authorization", "Bearer dev-token")
+	router.ServeHTTP(optimize, optimizeReq)
+	if optimize.Code != http.StatusOK {
+		t.Fatalf("optimize status = %d body=%s", optimize.Code, optimize.Body.String())
+	}
+	if !strings.Contains(optimize.Body.String(), `"optimized"`) {
+		t.Fatalf("optimize body = %s, want optimized field", optimize.Body.String())
+	}
+
+	del := httptest.NewRecorder()
+	delReq := httptest.NewRequest(http.MethodDelete, "/api/skill/"+createBody.Data.ID, nil)
+	delReq.Header.Set("Authorization", "Bearer dev-token")
+	router.ServeHTTP(del, delReq)
+	if del.Code != http.StatusOK {
+		t.Fatalf("delete status = %d body=%s", del.Code, del.Body.String())
+	}
+}
+
+// TestSkillRoutesRejectLegacyUpdateRouteAndOversizedFields 验证旧更新路由已移除且字段长度由 HTTP binding 拦截。
+func TestSkillRoutesRejectLegacyUpdateRouteAndOversizedFields(t *testing.T) {
+	router := newTestRouter(t)
+
+	legacy := httptest.NewRecorder()
+	legacyReq := httptest.NewRequest(http.MethodPatch, "/api/skill/", strings.NewReader(`{"id":"`+uuid.NewString()+`","name":"旧路由"}`))
+	legacyReq.Header.Set("Content-Type", "application/json")
+	legacyReq.Header.Set("Authorization", "Bearer dev-token")
+	router.ServeHTTP(legacy, legacyReq)
+	if legacy.Code != http.StatusNotFound {
+		t.Fatalf("legacy update status = %d body=%s, want 404", legacy.Code, legacy.Body.String())
+	}
+
+	tooLongName := httptest.NewRecorder()
+	tooLongNameReq := httptest.NewRequest(http.MethodPost, "/api/skill/create", strings.NewReader(`{"name":"`+strings.Repeat("a", 65)+`"}`))
+	tooLongNameReq.Header.Set("Content-Type", "application/json")
+	tooLongNameReq.Header.Set("Authorization", "Bearer dev-token")
+	router.ServeHTTP(tooLongName, tooLongNameReq)
+	if tooLongName.Code != http.StatusBadRequest {
+		t.Fatalf("oversized name status = %d body=%s, want 400", tooLongName.Code, tooLongName.Body.String())
+	}
+
+	tooLongFewShot := httptest.NewRecorder()
+	tooLongFewShotReq := httptest.NewRequest(http.MethodPost, "/api/skill/create", strings.NewReader(`{"name":"技能","config":{"few_shots":[{"input":"`+strings.Repeat("a", 2001)+`","output":"ok"}]}}`))
+	tooLongFewShotReq.Header.Set("Content-Type", "application/json")
+	tooLongFewShotReq.Header.Set("Authorization", "Bearer dev-token")
+	router.ServeHTTP(tooLongFewShot, tooLongFewShotReq)
+	if tooLongFewShot.Code != http.StatusBadRequest {
+		t.Fatalf("oversized few-shot status = %d body=%s, want 400", tooLongFewShot.Code, tooLongFewShot.Body.String())
 	}
 }
 

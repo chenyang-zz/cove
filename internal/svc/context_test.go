@@ -120,6 +120,7 @@ func TestWithTxRequiresGormDB(t *testing.T) {
 	}
 }
 
+// TestWithTxRollsBackAndCommitsWhenPostgresEnvIsConfigured 验证事务上下文会重新绑定所有 Postgres 仓储并正确提交或回滚。
 func TestWithTxRollsBackAndCommitsWhenPostgresEnvIsConfigured(t *testing.T) {
 	db := newSvcTxTestDB(t)
 	ctx := context.Background()
@@ -129,7 +130,7 @@ func TestWithTxRollsBackAndCommitsWhenPostgresEnvIsConfigured(t *testing.T) {
 	rollbackUsername := "tx-rollback-" + uuid.NewString()
 	rollbackErr := errors.New("rollback")
 	err := svcCtx.WithTx(ctx, func(txSvc *svc.ServiceContext) error {
-		if txSvc.GormDB == nil || txSvc.UserRepo == nil || txSvc.ConversationRepo == nil {
+		if txSvc.GormDB == nil || txSvc.UserRepo == nil || txSvc.ConversationRepo == nil || txSvc.SkillRepo == nil {
 			return errors.New("transaction repositories were not rebound")
 		}
 		user, err := txSvc.UserRepo.Create(ctx, &models.User{
@@ -154,7 +155,7 @@ func TestWithTxRollsBackAndCommitsWhenPostgresEnvIsConfigured(t *testing.T) {
 	commitUsername := "tx-commit-" + uuid.NewString()
 	var committedUserID uuid.UUID
 	err = svcCtx.WithTx(ctx, func(txSvc *svc.ServiceContext) error {
-		if txSvc.GormDB == nil || txSvc.UserRepo == nil || txSvc.ConversationRepo == nil {
+		if txSvc.GormDB == nil || txSvc.UserRepo == nil || txSvc.ConversationRepo == nil || txSvc.SkillRepo == nil {
 			return errors.New("transaction repositories were not rebound")
 		}
 		user, err := txSvc.UserRepo.Create(ctx, &models.User{

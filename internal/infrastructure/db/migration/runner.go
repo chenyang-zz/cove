@@ -50,6 +50,7 @@ func (r *Runner) Up(ctx context.Context) error {
 		&models.Document{},
 		&models.Image{},
 		&models.Tag{},
+		&models.Skill{},
 	); err != nil {
 		return xerr.Wrapf(err, "执行 GORM migration 失败")
 	}

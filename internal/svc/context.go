@@ -60,6 +60,7 @@ type ServiceContext struct {
 	AgentTaskRepo       repository.AgentTaskRepository
 	MCPServerRepo       repository.MCPServerRepository
 	KnowledgeBaseRepo   repository.KnowledgeBaseRepository
+	SkillRepo           repository.SkillRepository
 	DocumentRepo        repository.DocumentRepository
 	ImageRepo           repository.ImageRepository
 	TagRepo             repository.TagRepository
@@ -185,6 +186,7 @@ func bindPostgresRepositories(s *ServiceContext, db *gorm.DB) {
 	s.AgentTaskRepo = repositorypostgres.NewAgentTaskRepository(db)
 	s.MCPServerRepo = repositorypostgres.NewMCPServerRepository(db)
 	s.KnowledgeBaseRepo = repositorypostgres.NewKnowledgeBaseRepository(db)
+	s.SkillRepo = repositorypostgres.NewSkillRepository(db)
 	s.DocumentRepo = repositorypostgres.NewDocumentRepository(db)
 	s.ImageRepo = repositorypostgres.NewImageRepository(db)
 	s.TagRepo = repositorypostgres.NewTagRepository(db)

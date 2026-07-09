@@ -49,6 +49,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	knowledgeBase := handler.NewKnowledgeBaseHandler(deps.Svc)
 	document := handler.NewDocumentHandler(deps.Svc)
 	tag := handler.NewTagHandler(deps.Svc)
+	skill := handler.NewSkillHandler(deps.Svc)
 
 	authMiddleware := middleware.Auth(deps.Svc.TokenIssuer)
 
@@ -64,6 +65,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	routes.RegisterKnowledgeBaseRoutes(api, knowledgeBase, authMiddleware)
 	routes.RegisterDocumentRoutes(api, document, authMiddleware)
 	routes.RegisterTagRoutes(api, tag, authMiddleware)
+	routes.RegisterSkillRoutes(api, skill, authMiddleware)
 	if deps.EnableDebugPanicRoute {
 		routes.RegisterDebugRoutes(api)
 	}
