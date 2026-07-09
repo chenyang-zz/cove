@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **boxify-api-go** (9964 symbols, 39029 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **cove** (9975 symbols, 39074 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -24,10 +24,10 @@ This project is indexed by GitNexus as **boxify-api-go** (9964 symbols, 39029 re
 
 | Resource | Use for |
 |----------|---------|
-| `gitnexus://repo/boxify-api-go/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/boxify-api-go/clusters` | All functional areas |
-| `gitnexus://repo/boxify-api-go/processes` | All execution flows |
-| `gitnexus://repo/boxify-api-go/process/{name}` | Step-by-step execution trace |
+| `gitnexus://repo/cove/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/cove/clusters` | All functional areas |
+| `gitnexus://repo/cove/processes` | All execution flows |
+| `gitnexus://repo/cove/process/{name}` | Step-by-step execution trace |
 
 ## CLI
 

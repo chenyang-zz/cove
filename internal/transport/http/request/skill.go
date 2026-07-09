@@ -19,7 +19,7 @@ type SkillConfig struct {
 type CreateSkillRequest struct {
 	Name        string       `json:"name" binding:"required,min=1,max=64"`
 	Description string       `json:"description" binding:"max=256"`
-	Icon        string       `json:"icon" binding:"omitempty,max=16"` // default 🧩
+	Icon        *string      `json:"icon" binding:"omitempty,max=16"` // default 🧩
 	Prompt      string       `json:"prompt" binding:"max=8000"`
 	ToolKeys    []string     `json:"tool_keys" binding:"omitempty"`
 	KBID        *string      `json:"kb_id" binding:"omitempty,uuid"`

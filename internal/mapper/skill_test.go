@@ -145,7 +145,7 @@ func TestSkillFromCreateRequestMapsDefaults(t *testing.T) {
 	got := mapper.SkillFromCreateRequest(&request.CreateSkillRequest{
 		Name:        " 技能 ",
 		Description: " 说明 ",
-		Icon:        " ",
+		Icon:        stringPtr(" "),
 		Prompt:      " 提示词 ",
 		ToolKeys:    []string{" search ", ""},
 		Config:      &request.SkillConfig{QuickPrompt: []string{"问题"}},
@@ -160,4 +160,8 @@ func TestSkillFromCreateRequestMapsDefaults(t *testing.T) {
 	if got.KBID == nil || *got.KBID != kbID || len(got.ToolKeys) != 1 || got.ToolKeys[0] != "search" {
 		t.Fatalf("SkillFromCreateRequest associations = %#v, want kb and normalized tools", got)
 	}
+}
+
+func stringPtr(v string) *string {
+	return &v
 }

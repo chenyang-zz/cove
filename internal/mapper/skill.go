@@ -138,7 +138,10 @@ func SkillFromCreateRequest(input *request.CreateSkillRequest, userID uuid.UUID,
 	if input == nil {
 		input = &request.CreateSkillRequest{}
 	}
-	icon := strings.TrimSpace(input.Icon)
+	icon := defaultIcon
+	if input.Icon != nil {
+		icon = strings.TrimSpace(*input.Icon)
+	}
 	if icon == "" {
 		icon = defaultIcon
 	}
