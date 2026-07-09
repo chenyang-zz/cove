@@ -1,0 +1,35 @@
+internal/mapper/skill.go
+  s_bed6061d2f5706::t_b1d27a85596d1b 141-144
+internal/mapper/skill_test.go
+  s_bed6061d2f5706::t_469a7da12a2cb1 148,164-167
+internal/transport/http/request/skill.go
+  s_bed6061d2f5706::t_5841d7630cc374 22
+AGENTS.md
+  s_e2bb6bed856c07::t_edd6c15624aed3 4,27-30
+CLAUDE.md
+  s_e2bb6bed856c07::t_578a6959242aac 4,27-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "5b795008f0fd59eebe9775819d53052274185088",
+  "prompts": {},
+  "sessions": {
+    "s_bed6061d2f5706": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f1817-2478-7702-8e5a-fc4304ca0bc4",
+        "model": "unknown"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    },
+    "s_e2bb6bed856c07": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_e2bb6bed856c07",
+        "model": "unknown"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
