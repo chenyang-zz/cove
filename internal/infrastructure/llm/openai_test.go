@@ -284,6 +284,38 @@ func TestOpenAIClientInvokeWithToolsSendsToolHistory(t *testing.T) {
 	}
 }
 
+// TestOpenAIClientPreservesCompleteToolJSONSchema 验证 OpenAI 工具参数会保留 MCP schema 的顶层扩展字段。
+func TestOpenAIClientPreservesCompleteToolJSONSchema(t *testing.T) {
+	var requestBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"chatcmpl_schema","model":"chat-model","choices":[{"finish_reason":"stop","message":{"content":"done"}}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`))
+	}))
+	defer server.Close()
+
+	client := infra.NewOpenaiLLMClient("sk-test", "chat-model", infra.WithBaseURL(server.URL+"/v1"))
+	_, err := client.InvokeResult(context.Background(), []*corellm.Message{corellm.UserMessage("ping")}, corellm.WithTools(coretool.Descriptor{
+		Name: "mcp_schema",
+		Schema: coretool.Schema{Parameters: coretool.NewParametersSchema(map[string]any{
+			"type":       "object",
+			"properties": map[string]any{"query": map[string]any{"type": "string"}},
+			"oneOf":      []any{map[string]any{"required": []any{"query"}}},
+			"$defs":      map[string]any{"filter": map[string]any{"type": "object"}},
+		})},
+	}))
+	if err != nil {
+		t.Fatalf("InvokeResult error = %v, want nil", err)
+	}
+	tools := requestBody["tools"].([]any)
+	parameters := tools[0].(map[string]any)["function"].(map[string]any)["parameters"].(map[string]any)
+	if parameters["oneOf"] == nil || parameters["$defs"] == nil {
+		t.Fatalf("OpenAI parameters = %#v, want oneOf and $defs", parameters)
+	}
+}
+
 func TestOpenAIClientStreamReadsSSEDeltaContent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")

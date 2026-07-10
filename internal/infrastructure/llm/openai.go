@@ -261,22 +261,7 @@ func openAIToolCalls(calls []openai.ChatCompletionMessageToolCallUnion) []corell
 }
 
 func toolParameters(schema coretool.ParametersSchema) map[string]any {
-	params := map[string]any{
-		"type": "object",
-	}
-	if schema.Type != "" {
-		params["type"] = schema.Type
-	}
-	if len(schema.Properties) > 0 {
-		params["properties"] = schema.Properties
-	}
-	if len(schema.Required) > 0 {
-		params["required"] = schema.Required
-	}
-	if schema.AdditionalProperties != nil {
-		params["additionalProperties"] = schema.AdditionalProperties
-	}
-	return params
+	return schema.Map()
 }
 
 func parseToolInput(raw string) coretool.Input {

@@ -220,6 +220,38 @@ func TestAnthropicClientInvokeWithToolsSendsToolHistory(t *testing.T) {
 	}
 }
 
+// TestAnthropicClientPreservesCompleteToolJSONSchema 验证 Anthropic 工具参数会保留 MCP schema 的顶层扩展字段。
+func TestAnthropicClientPreservesCompleteToolJSONSchema(t *testing.T) {
+	var requestBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"msg_schema","type":"message","role":"assistant","model":"claude-sonnet-4-5","content":[{"type":"text","text":"done"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`))
+	}))
+	defer server.Close()
+
+	client := infra.NewAnthropicLLMClient("sk-ant", "claude-sonnet-4-5", infra.WithAnthropicBaseURL(server.URL))
+	_, err := client.InvokeResult(context.Background(), []*corellm.Message{corellm.UserMessage("ping")}, corellm.WithTools(coretool.Descriptor{
+		Name: "mcp_schema",
+		Schema: coretool.Schema{Parameters: coretool.NewParametersSchema(map[string]any{
+			"type":       "object",
+			"properties": map[string]any{"query": map[string]any{"type": "string"}},
+			"oneOf":      []any{map[string]any{"required": []any{"query"}}},
+			"$defs":      map[string]any{"filter": map[string]any{"type": "object"}},
+		})},
+	}))
+	if err != nil {
+		t.Fatalf("InvokeResult error = %v, want nil", err)
+	}
+	tools := requestBody["tools"].([]any)
+	inputSchema := tools[0].(map[string]any)["input_schema"].(map[string]any)
+	if inputSchema["oneOf"] == nil || inputSchema["$defs"] == nil {
+		t.Fatalf("Anthropic input_schema = %#v, want oneOf and $defs", inputSchema)
+	}
+}
+
 // 验证 Anthropic Invoke 会使用默认最大 token。
 func TestAnthropicClientInvokeUsesDefaultMaxTokens(t *testing.T) {
 	var requestBody map[string]any

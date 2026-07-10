@@ -257,12 +257,11 @@ func toAnthropicToolChoice(choice *corellm.ToolChoice) anthropic.ToolChoiceUnion
 }
 
 func anthropicSchemaExtraFields(schema coretool.ParametersSchema) map[string]any {
-	extra := map[string]any{}
-	if schema.Type != "" && schema.Type != "object" {
-		extra["type"] = schema.Type
-	}
-	if schema.AdditionalProperties != nil {
-		extra["additionalProperties"] = schema.AdditionalProperties
+	extra := schema.Map()
+	delete(extra, "properties")
+	delete(extra, "required")
+	if extra["type"] == "object" {
+		delete(extra, "type")
 	}
 	if len(extra) == 0 {
 		return nil
