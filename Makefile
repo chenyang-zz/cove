@@ -29,8 +29,9 @@ docs:
 	go run ./cmd/codegen docs --check --format json
 	go run ./cmd/codegen prompt --check --format json
 
-# install-hooks: 安装 git hooks 到本地 .git/hooks
+# install-hooks: 通过 core.hooksPath 让钩子随仓库生效（推荐）
 install-hooks:
-	cp .githooks/pre-push .git/hooks/pre-push
-	chmod +x .git/hooks/pre-push
-	@echo "git hooks 安装完成。运行 'make install-hooks' 后即可在推送前自动校验。"
+	git config core.hooksPath .githooks
+	@echo "git hooks 已激活：hooksPath → .githooks"
+	@echo "现在每次 push 前都会自动运行本地 CI 校验，避免流水线失败。"
+	@echo "跳过方式：GIT_PUSH_VERIFY=false git push"

@@ -38,6 +38,28 @@ services:
     volumes:
       - redis_data:/data
 
+  api:
+    image: cove-api:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=production
+    depends_on:
+      - postgres
+      - redis
+      - elasticsearch
+      - neo4j
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
 volumes:
   pg_data:
   es_data:
