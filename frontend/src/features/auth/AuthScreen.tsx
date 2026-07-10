@@ -1,8 +1,9 @@
 import { useRef, useState, type FormEvent } from 'react'
-import coveIcon from '../../../../build/appicon.png'
 import './AuthScreen.css'
 import { ApiError, login, register } from './api'
 import type { StoredSession } from './types'
+
+const coveIcon = '/cove-mark.svg'
 
 type AuthMode = 'login' | 'register'
 type FieldName = 'login' | 'username' | 'email' | 'password' | 'confirmPassword'
@@ -152,7 +153,12 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
           <p>{isLogin ? '登录后继续使用你的 Cove。' : '只需一分钟，马上开始使用 Cove。'}</p>
         </header>
 
-        <div className="auth-tabs" role="tablist" aria-label="选择认证方式">
+        <div
+          className={isLogin ? 'auth-tabs' : 'auth-tabs auth-tabs--register'}
+          role="tablist"
+          aria-label="选择认证方式"
+        >
+          <span className="auth-tabs__indicator" aria-hidden="true" />
           <button
             type="button"
             role="tab"

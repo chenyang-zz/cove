@@ -18,12 +18,8 @@ import (
 const wailsModule = "github.com/wailsapp/wails/v3"
 
 var (
-	upstreamLayout = []byte(`    CGFloat webTop = safe.top;
-    CGFloat webBottom = safe.bottom + tabH;
-    self.webView.frame = UIEdgeInsetsInsetRect(self.view.bounds, UIEdgeInsetsMake(webTop, safe.left, webBottom, safe.right));`)
-	fullBleedLayout = []byte(`    // Let the web content paint below the status bar and Home Indicator.
-    // Interactive elements remain protected by CSS safe-area insets.
-    self.webView.frame = UIEdgeInsetsInsetRect(self.view.bounds, UIEdgeInsetsMake(0, 0, tabH, 0));`)
+	upstreamLayout  = []byte("    CGFloat webTop = safe.top;\n    CGFloat webBottom = safe.bottom + tabH;\n    self.webView.frame = UIEdgeInsetsInsetRect(self.view.bounds, UIEdgeInsetsMake(webTop, safe.left, webBottom, safe.right));")
+	fullBleedLayout = []byte("    // Let the web content paint below the status bar and Home Indicator.\n    // Interactive elements remain protected by CSS safe-area insets.\n    self.webView.frame = UIEdgeInsetsInsetRect(self.view.bounds, UIEdgeInsetsMake(0, 0, tabH, 0));")
 )
 
 func main() {

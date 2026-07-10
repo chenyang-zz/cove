@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import coveIcon from '../../../build/appicon.png'
 import './App.css'
 import { AuthScreen } from '../features/auth/AuthScreen'
 import { clearSession, restoreSession } from '../features/auth/api'
 import type { StoredSession } from '../features/auth/types'
 import { getAppInfo, type AppInfo } from '../shared/api/appInfo'
+
+const coveIcon = '/cove-mark.svg'
 
 type LoadState =
   | { status: 'loading' }

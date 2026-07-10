@@ -39,7 +39,7 @@ tasks:
       - task: common:generate:icons
     cmds:
       - echo "Building iOS app {{.APP_NAME}}..."
-      - go build -mod=mod -modfile build/ios/xcode/fullbleed.mod -buildmode=c-archive -overlay build/ios/xcode/overlay.json {{.BUILD_FLAGS}} -o {{.OUTPUT}}.a
+      - go build -p=1 -mod=mod -modfile build/ios/xcode/fullbleed.mod -buildmode=c-archive -overlay build/ios/xcode/overlay.json {{.BUILD_FLAGS}} -o {{.OUTPUT}}.a
     vars:
       DEV_SERVER_URL: '{{.DEV_SERVER_URL | default ""}}'
       BUILD_FLAGS: '{{if eq .PRODUCTION "true"}}-tags production,ios -trimpath -buildvcs=false -ldflags="-w -s"{{else}}-tags ios,debug -buildvcs=false -gcflags=all="-l"{{if .DEV_SERVER_URL}} -ldflags="-X github.com/chenyang-zz/cove/internal/app.devServerURL={{.DEV_SERVER_URL}}"{{end}}{{end}}'
@@ -225,6 +225,9 @@ tasks:
       - build/config.yml
       - build/appicon.png
       - build/ios/scripts/patch_xcode_project/main.go
+      - build/ios/scripts/full_bleed_overlay.go
+      - go.mod
+      - go.sum
     generates:
       - build/ios/xcode/main/main.m
       - build/ios/xcode/main/Assets.xcassets/**/*

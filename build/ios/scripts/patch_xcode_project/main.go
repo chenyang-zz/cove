@@ -10,11 +10,16 @@ import (
 	"strings"
 )
 
-const objcLinkerFlag = `OTHER_LDFLAGS = "-ObjC";`
+const (
+	objcLinkerFlag     = `OTHER_LDFLAGS = "-ObjC";`
+	fullBleedBuildMark = "full_bleed_overlay.go"
+	fullBleedBuild     = `env -u GOOS -u GOARCH -u CGO_ENABLED -u CGO_CFLAGS -u CGO_LDFLAGS go run build/ios/scripts/full_bleed_overlay.go -overlay build/ios/xcode/overlay.json -modfile build/ios/xcode/fullbleed.mod -sumfile build/ios/xcode/fullbleed.sum\ngo build -p=1 -mod=mod -modfile build/ios/xcode/fullbleed.mod -buildmode=c-archive -overlay build/ios/xcode/overlay.json -o \"bin/$1.a\"`
+)
 
 var (
 	bundleNamePattern       = regexp.MustCompile(`(?s)<key>CFBundleName</key>\s*<string>([^<]+)</string>`)
 	bundleExecutablePattern = regexp.MustCompile(`(?s)(<key>CFBundleExecutable</key>\s*<string>)[^<]*(</string>)`)
+	archiveBuildPattern     = regexp.MustCompile(`go build -buildmode=c-archive -overlay build/ios/xcode/overlay\.json -o \\"bin/([^\\"]+)\.a\\"`)
 )
 
 func main() {
@@ -40,6 +45,12 @@ func patchProject(path string) {
 			fatalf("unexpected Xcode signing template")
 		}
 		project = strings.ReplaceAll(project, "CODE_SIGNING_ALLOWED = NO;", "CODE_SIGNING_ALLOWED = YES;\n\t\t\t\t"+objcLinkerFlag)
+	}
+	if !strings.Contains(project, fullBleedBuildMark) {
+		if !archiveBuildPattern.MatchString(project) {
+			fatalf("unexpected Xcode archive build script")
+		}
+		project = archiveBuildPattern.ReplaceAllString(project, fullBleedBuild)
 	}
 	if err := os.WriteFile(path, []byte(project), 0o644); err != nil {
 		fatalf("write project: %v", err)
