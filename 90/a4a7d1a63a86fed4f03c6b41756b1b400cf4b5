@@ -1,0 +1,23 @@
+internal/mapper/chat.go
+  s_c2da8686bc0ebb::t_27fd17c4ee6d70 44-53
+internal/mapper/chat_test.go
+  s_c2da8686bc0ebb::t_5bbd890ab2c974 74-105
+internal/transport/http/response/chat.go
+  s_c2da8686bc0ebb::t_5b1f4940862629 27-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.11",
+  "base_commit_sha": "90a4a7d1a63a86fed4f03c6b41756b1b400cf4b5",
+  "prompts": {},
+  "sessions": {
+    "s_c2da8686bc0ebb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_c2da8686bc0ebb",
+        "model": "unknown"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
