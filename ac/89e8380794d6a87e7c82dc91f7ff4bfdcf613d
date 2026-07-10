@@ -1,0 +1,65 @@
+internal/infrastructure/db/migration/runner.go
+  s_d5520a108cc9cc::t_1c57a67dd05853 18-19,22,27-29,34-41,48-51
+internal/repository/postgres/auth_repository_test.go
+  s_d5520a108cc9cc::t_1c57a67dd05853 119
+cmd/migration/main.go
+  s_d5520a108cc9cc::t_1c57a67dd05853 10,26-29
+cmd/migration/README.md
+  s_d5520a108cc9cc::t_1c57a67dd05853 3,13,23,25-26,31
+internal/svc/context_test.go
+  s_d5520a108cc9cc::t_1c57a67dd05853 235
+internal/models/migration_test.go
+  s_d5520a108cc9cc::t_1c57a67dd05853 1-48
+internal/models/migration.go
+  s_d5520a108cc9cc::t_1c57a67dd05853 1-26
+internal/infrastructure/db/migration/runner_test.go
+  s_d5520a108cc9cc::t_1c57a67dd05853 7-8,11,19-23,25-34,38,45,137-148
+internal/logic/toolconfig/list_tool_configs.go
+  s_d5520a108cc9cc::t_3dfe2107634524 1-32
+internal/logic/toolconfig/toggle_tool.go
+  s_d5520a108cc9cc::t_6106c0732061a0 1-32
+internal/transport/http/handler/toolconfig.go
+  s_d5520a108cc9cc::t_49d324c410fc3b 1-55
+.auto-header.toml
+  s_8c3323a6fb2fb6::t_6b0759c9d86832 1-13
+internal/models/hooks.go
+  s_8c3323a6fb2fb6::t_3b66caef52c0dd 83-87
+internal/models/tool_config.go
+  s_8c3323a6fb2fb6::t_adb232622428e0 1-30
+internal/repository/postgres/tool_config.go
+  s_8c3323a6fb2fb6::t_1f45e76c271721 1-104
+internal/repository/tool_config.go
+  s_8c3323a6fb2fb6::t_386e84cae38889 1-69
+internal/transport/http/request/toolconfig.go
+  s_8c3323a6fb2fb6::t_52072d1ea9ace5 1-15
+internal/transport/http/response/toolconfig.go
+  s_8c3323a6fb2fb6::t_38ea871a6f2b9b 1-18
+internal/transport/http/router.go
+  s_8c3323a6fb2fb6::t_8b742d3b604f1c 53,70
+internal/transport/http/routes/toolconfig.go
+  s_8c3323a6fb2fb6::t_b266e4fa1f26de 1-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.11",
+  "base_commit_sha": "ac89e8380794d6a87e7c82dc91f7ff4bfdcf613d",
+  "prompts": {},
+  "sessions": {
+    "s_8c3323a6fb2fb6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_8c3323a6fb2fb6",
+        "model": "unknown"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    },
+    "s_d5520a108cc9cc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f0892-f010-7a52-bb80-be2f10228cc9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
