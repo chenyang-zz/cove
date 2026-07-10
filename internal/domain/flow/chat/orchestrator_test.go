@@ -11,9 +11,11 @@ import (
 
 	corereact "github.com/boxify/api-go/internal/core/agent/react"
 	corellm "github.com/boxify/api-go/internal/core/llm"
+	coremcp "github.com/boxify/api-go/internal/core/mcp"
 	coreprompt "github.com/boxify/api-go/internal/core/prompt"
 	coretool "github.com/boxify/api-go/internal/core/tool"
 	flow "github.com/boxify/api-go/internal/domain/flow"
+	domaintoolmcp "github.com/boxify/api-go/internal/domain/tools/mcp"
 	"github.com/boxify/api-go/internal/domain/types"
 	"github.com/boxify/api-go/internal/infrastructure/security"
 	"github.com/boxify/api-go/internal/models"
@@ -218,9 +220,12 @@ func TestToolRegistryDefaultsBuiltinToolsEnabled(t *testing.T) {
 	svcCtx := newFlowChatTestServiceContext(t, userID, &fakeFlowChatLLMClient{})
 	orchestrator := NewOrchestrator(svcCtx)
 
-	registry, err := orchestrator.toolRegistry(context.Background(), userID, []uuid.UUID{uuid.New()})
+	registry, closeTools, err := orchestrator.toolRegistry(context.Background(), userID, []uuid.UUID{uuid.New()})
 	if err != nil {
 		t.Fatalf("toolRegistry error = %v, want nil", err)
+	}
+	if closeTools != nil {
+		defer closeTools()
 	}
 	for _, toolKey := range []string{"current_time", "knowledge_search"} {
 		if _, ok := registry.Lookup(toolKey); !ok {
@@ -239,9 +244,12 @@ func TestToolRegistryExcludesPersistedDisabledTool(t *testing.T) {
 	}
 	orchestrator := NewOrchestrator(svcCtx)
 
-	registry, err := orchestrator.toolRegistry(context.Background(), userID, nil)
+	registry, closeTools, err := orchestrator.toolRegistry(context.Background(), userID, nil)
 	if err != nil {
 		t.Fatalf("toolRegistry error = %v, want nil", err)
+	}
+	if closeTools != nil {
+		defer closeTools()
 	}
 	if _, ok := registry.Lookup("current_time"); ok {
 		t.Fatal("toolRegistry Lookup(current_time) = true, want disabled tool excluded")
@@ -257,9 +265,12 @@ func TestToolRegistryKeepsKnowledgeRequestOverride(t *testing.T) {
 	}}
 	orchestrator := NewOrchestrator(svcCtx)
 
-	registry, err := orchestrator.toolRegistry(context.Background(), userID, nil)
+	registry, closeTools, err := orchestrator.toolRegistry(context.Background(), userID, nil)
 	if err != nil {
 		t.Fatalf("toolRegistry error = %v, want nil", err)
+	}
+	if closeTools != nil {
+		defer closeTools()
 	}
 	if _, ok := registry.Lookup("knowledge_search"); ok {
 		t.Fatal("toolRegistry Lookup(knowledge_search) = true, want request override excluded")
@@ -274,9 +285,111 @@ func TestToolRegistryReturnsToolConfigRepositoryError(t *testing.T) {
 	svcCtx.ToolConfigRepo.(*fakeFlowToolConfigRepo).listErr = want
 	orchestrator := NewOrchestrator(svcCtx)
 
-	_, err := orchestrator.toolRegistry(context.Background(), userID, nil)
+	_, _, err := orchestrator.toolRegistry(context.Background(), userID, nil)
 	if !errors.Is(err, want) {
 		t.Fatalf("toolRegistry error = %v, want %v", err, want)
+	}
+}
+
+// TestToolRegistryRegistersMCPToolAndClosesSession 验证默认启用的 MCP 工具进入 registry、调用原始工具并在本轮结束时关闭 session。
+func TestToolRegistryRegistersMCPToolAndClosesSession(t *testing.T) {
+	userID := uuid.New()
+	server := &models.MCPServer{ID: uuid.New(), UserID: userID, Name: "搜索服务", Enabled: true}
+	session := &fakeFlowMCPSession{
+		tools:  []coremcp.ToolInfo{{Name: "search", Description: "搜索"}},
+		result: &coremcp.CallResult{Content: []coremcp.Content{{Type: "text", Text: "result"}}},
+	}
+	opener := &fakeFlowMCPOpener{session: session}
+	svcCtx := newFlowChatTestServiceContext(t, userID, &fakeFlowChatLLMClient{})
+	svcCtx.MCPServerRepo.(*fakeFlowMCPServerRepo).rows = []*models.MCPServer{server}
+	svcCtx.MCPToolService = coremcp.NewService(coremcp.Options{SessionOpener: opener})
+	orchestrator := NewOrchestrator(svcCtx)
+
+	registry, closeTools, err := orchestrator.toolRegistry(context.Background(), userID, nil)
+	if err != nil {
+		t.Fatalf("toolRegistry error = %v, want nil", err)
+	}
+	toolKey := domaintoolmcp.ToolKey(server.ID, "search")
+	tool, ok := registry.Lookup(toolKey)
+	if !ok {
+		t.Fatalf("toolRegistry Lookup(%q) = false, want MCP tool", toolKey)
+	}
+	output, err := tool.Invoke(context.Background(), coretool.Input{"query": "hello"})
+	if err != nil || output.Text != "result" || session.lastName != "search" {
+		t.Fatalf("MCP Invoke output/error/name = %+v/%v/%q, want result/nil/search", output, err, session.lastName)
+	}
+	if closeTools == nil {
+		t.Fatal("closeTools = nil, want MCP cleanup")
+	}
+	if err := closeTools(); err != nil {
+		t.Fatalf("closeTools error = %v, want nil", err)
+	}
+	if session.closeCalls != 1 {
+		t.Fatalf("session close calls = %d, want 1", session.closeCalls)
+	}
+}
+
+// TestToolRegistryMCPServerAndToolSwitchesTakePrecedence 验证 server 总开关和工具级关闭都会阻止 MCP 工具进入 registry。
+func TestToolRegistryMCPServerAndToolSwitchesTakePrecedence(t *testing.T) {
+	userID := uuid.New()
+	for _, testCase := range []struct {
+		name          string
+		serverEnabled bool
+		toolDisabled  bool
+	}{
+		{name: "server disabled", serverEnabled: false},
+		{name: "tool disabled", serverEnabled: true, toolDisabled: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			server := &models.MCPServer{
+				ID: uuid.New(), UserID: userID, Name: testCase.name, Enabled: testCase.serverEnabled,
+				ToolsCache: models.MCPMetas{&models.MCPMeta{Name: "search"}},
+			}
+			session := &fakeFlowMCPSession{tools: []coremcp.ToolInfo{{Name: "search"}}}
+			opener := &fakeFlowMCPOpener{session: session}
+			svcCtx := newFlowChatTestServiceContext(t, userID, &fakeFlowChatLLMClient{})
+			svcCtx.MCPServerRepo.(*fakeFlowMCPServerRepo).rows = []*models.MCPServer{server}
+			svcCtx.MCPToolService = coremcp.NewService(coremcp.Options{SessionOpener: opener})
+			if testCase.toolDisabled {
+				svcCtx.ToolConfigRepo.(*fakeFlowToolConfigRepo).rows = []*models.ToolConfig{{
+					ID: uuid.New(), UserID: userID, ToolKey: domaintoolmcp.ToolKey(server.ID, "search"), Enabled: false,
+				}}
+			}
+
+			registry, closeTools, err := NewOrchestrator(svcCtx).toolRegistry(context.Background(), userID, nil)
+			if err != nil {
+				t.Fatalf("toolRegistry error = %v, want nil", err)
+			}
+			if closeTools != nil {
+				defer closeTools()
+			}
+			if _, ok := registry.Lookup(domaintoolmcp.ToolKey(server.ID, "search")); ok {
+				t.Fatal("MCP tool registered despite disabled gate")
+			}
+			if !testCase.serverEnabled && opener.calls != 0 {
+				t.Fatalf("disabled server opener calls = %d, want 0", opener.calls)
+			}
+		})
+	}
+}
+
+// TestToolRegistrySkipsUnavailableMCPServer 验证单个 MCP server 连接失败只会被跳过，不影响内置工具 registry。
+func TestToolRegistrySkipsUnavailableMCPServer(t *testing.T) {
+	userID := uuid.New()
+	server := &models.MCPServer{ID: uuid.New(), UserID: userID, Name: "故障服务", Enabled: true}
+	svcCtx := newFlowChatTestServiceContext(t, userID, &fakeFlowChatLLMClient{})
+	svcCtx.MCPServerRepo.(*fakeFlowMCPServerRepo).rows = []*models.MCPServer{server}
+	svcCtx.MCPToolService = coremcp.NewService(coremcp.Options{SessionOpener: &fakeFlowMCPOpener{err: errors.New("offline")}})
+
+	registry, closeTools, err := NewOrchestrator(svcCtx).toolRegistry(context.Background(), userID, nil)
+	if err != nil {
+		t.Fatalf("toolRegistry error = %v, want nil", err)
+	}
+	if closeTools != nil {
+		t.Fatal("closeTools != nil, want no opened MCP session")
+	}
+	if _, ok := registry.Lookup("current_time"); !ok {
+		t.Fatal("current_time missing after MCP server failure")
 	}
 }
 
@@ -469,10 +582,126 @@ func newFlowChatTestServiceContext(t *testing.T, userID uuid.UUID, llmClient *fa
 		ModelConfigRepo:   &fakeFlowModelConfigRepo{rows: []*models.ModelConfig{{ID: uuid.New(), UserID: userID, Type: string(types.ChatModelType), Provider: "fake", ModelName: "fake-chat", APIKeyEncrypted: encrypted, IsDefault: true}}},
 		MessageRepo:       &fakeFlowMessageRepo{},
 		KnowledgeBaseRepo: &fakeFlowKnowledgeBaseRepo{},
+		MCPServerRepo:     &fakeFlowMCPServerRepo{},
 		ToolConfigRepo:    &fakeFlowToolConfigRepo{},
+		MCPToolService:    coremcp.NewService(coremcp.Options{Client: &fakeFlowMCPClient{}}),
 		PromptManager:     promptManager,
 		PromptClient:      promptsgen.NewClient(promptManager),
 	}
+}
+
+type fakeFlowMCPClient struct {
+	tools []coremcp.ToolInfo
+	err   error
+	calls int
+}
+
+func (c *fakeFlowMCPClient) ListTools(context.Context, coremcp.ServerConfig) ([]coremcp.ToolInfo, error) {
+	c.calls++
+	if c.err != nil {
+		return nil, c.err
+	}
+	return append([]coremcp.ToolInfo(nil), c.tools...), nil
+}
+
+type fakeFlowMCPOpener struct {
+	session coremcp.ToolSession
+	err     error
+	calls   int
+}
+
+func (o *fakeFlowMCPOpener) OpenSession(context.Context, coremcp.ServerConfig) (coremcp.ToolSession, error) {
+	o.calls++
+	if o.err != nil {
+		return nil, o.err
+	}
+	return o.session, nil
+}
+
+type fakeFlowMCPSession struct {
+	tools      []coremcp.ToolInfo
+	result     *coremcp.CallResult
+	listErr    error
+	callErr    error
+	closeErr   error
+	lastName   string
+	lastInput  map[string]any
+	closeCalls int
+}
+
+func (s *fakeFlowMCPSession) ListTools(context.Context) ([]coremcp.ToolInfo, error) {
+	if s.listErr != nil {
+		return nil, s.listErr
+	}
+	return append([]coremcp.ToolInfo(nil), s.tools...), nil
+}
+
+func (s *fakeFlowMCPSession) CallTool(_ context.Context, name string, input map[string]any) (*coremcp.CallResult, error) {
+	s.lastName = name
+	s.lastInput = input
+	if s.callErr != nil {
+		return nil, s.callErr
+	}
+	return s.result, nil
+}
+
+func (s *fakeFlowMCPSession) Close() error {
+	s.closeCalls++
+	return s.closeErr
+}
+
+type fakeFlowMCPServerRepo struct {
+	rows []*models.MCPServer
+	err  error
+}
+
+func (r *fakeFlowMCPServerRepo) Create(_ context.Context, userID uuid.UUID, row *models.MCPServer) (*models.MCPServer, error) {
+	row.UserID = userID
+	r.rows = append(r.rows, row)
+	return row, nil
+}
+
+func (r *fakeFlowMCPServerRepo) List(_ context.Context, userID uuid.UUID) ([]*models.MCPServer, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
+	out := make([]*models.MCPServer, 0, len(r.rows))
+	for _, row := range r.rows {
+		if row != nil && row.UserID == userID {
+			out = append(out, row)
+		}
+	}
+	return out, nil
+}
+
+func (r *fakeFlowMCPServerRepo) FindByID(_ context.Context, userID uuid.UUID, id uuid.UUID) (*models.MCPServer, error) {
+	for _, row := range r.rows {
+		if row != nil && row.UserID == userID && row.ID == id {
+			return row, nil
+		}
+	}
+	return nil, xerr.NotFound("MCP服务不存在")
+}
+
+func (r *fakeFlowMCPServerRepo) Update(_ context.Context, _ uuid.UUID, row *models.MCPServer) (*models.MCPServer, error) {
+	return row, nil
+}
+
+func (r *fakeFlowMCPServerRepo) UpdateFields(_ context.Context, _ uuid.UUID, _ uuid.UUID, row *models.MCPServer, _ *repository.MCPServerUpdateFields) (*models.MCPServer, error) {
+	return row, nil
+}
+
+func (r *fakeFlowMCPServerRepo) Delete(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil
+}
+
+func (r *fakeFlowMCPServerRepo) FindByName(_ context.Context, userID uuid.UUID, name string) (*models.MCPServer, error) {
+	for _, row := range r.rows {
+		if row != nil && row.UserID == userID && row.Name == name {
+			return row, nil
+		}
+	}
+	return nil, xerr.NotFound("MCP服务不存在")
 }
 
 type fakeFlowToolConfigRepo struct {

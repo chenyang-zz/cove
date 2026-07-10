@@ -3,16 +3,20 @@ package chat
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"log/slog"
 
 	corereact "github.com/boxify/api-go/internal/core/agent/react"
 	"github.com/boxify/api-go/internal/core/llm"
+	coremcp "github.com/boxify/api-go/internal/core/mcp"
 	coretool "github.com/boxify/api-go/internal/core/tool"
 	flow "github.com/boxify/api-go/internal/domain/flow"
 	domaintools "github.com/boxify/api-go/internal/domain/tools"
+	domaintoolmcp "github.com/boxify/api-go/internal/domain/tools/mcp"
 	"github.com/boxify/api-go/internal/domain/types"
+	"github.com/boxify/api-go/internal/models"
 	"github.com/boxify/api-go/internal/observability/xlog"
 	"github.com/boxify/api-go/internal/svc"
 	"github.com/boxify/api-go/internal/util"
@@ -87,10 +91,18 @@ func (o *Orchestrator) generate(ctx context.Context, input Input, events chan<- 
 	if err != nil {
 		return generationResult{}, err
 	}
-	registry, err := o.toolRegistry(runCtx, input.UserID, kbIDs)
+	registry, closeTools, err := o.toolRegistry(runCtx, input.UserID, kbIDs)
 	if err != nil {
 		return generationResult{}, err
 	}
+	defer func() {
+		if closeTools == nil {
+			return
+		}
+		if closeErr := closeTools(); closeErr != nil {
+			o.log.WarnContext(runCtx, "关闭MCP工具会话失败", slog.String("error", closeErr.Error()))
+		}
+	}()
 
 	hooks := &agentHooks{events: events}
 	options := []corereact.Option{
@@ -137,13 +149,13 @@ func (o *Orchestrator) historyMessages(ctx context.Context, userID uuid.UUID, co
 	return messages, nil
 }
 
-func (o *Orchestrator) toolRegistry(ctx context.Context, userID uuid.UUID, kbIDs []uuid.UUID) (*coretool.Registry, error) {
+func (o *Orchestrator) toolRegistry(ctx context.Context, userID uuid.UUID, kbIDs []uuid.UUID) (*coretool.Registry, func() error, error) {
 	if o.svcCtx == nil {
-		return coretool.NewRegistry(), nil
+		return coretool.NewRegistry(), nil, nil
 	}
 	catalog, err := domaintools.NewCatalog(o.svcCtx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	setNames := []string{domaintools.ToolSetSystem}
 	if len(kbIDs) > 0 {
@@ -151,14 +163,14 @@ func (o *Orchestrator) toolRegistry(ctx context.Context, userID uuid.UUID, kbIDs
 	}
 	registry, err := catalog.BuildRegistry(ctx, coretool.Selection{SetNames: setNames})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if o.svcCtx.ToolConfigRepo == nil {
-		return nil, errors.New("tool config repository is nil")
+		return nil, nil, errors.New("tool config repository is nil")
 	}
 	rows, err := o.svcCtx.ToolConfigRepo.List(ctx, userID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// 未持久化配置的内置工具默认启用，只覆盖用户显式保存过的状态。
@@ -182,10 +194,83 @@ func (o *Orchestrator) toolRegistry(ctx context.Context, userID uuid.UUID, kbIDs
 	filtered := coretool.NewRegistry()
 	for _, tool := range registry.Tools(enabled) {
 		if err := filtered.Register(ctx, tool); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return filtered, nil
+
+	if o.svcCtx.MCPServerRepo == nil || o.svcCtx.MCPToolService == nil {
+		return filtered, nil, nil
+	}
+	servers, err := o.svcCtx.MCPServerRepo.List(ctx, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	leases := make([]*coremcp.OpenedTools, 0, len(servers))
+	closeAll := func() error {
+		var errs []error
+		for index := len(leases) - 1; index >= 0; index-- {
+			if closeErr := leases[index].Close(); closeErr != nil {
+				errs = append(errs, closeErr)
+			}
+		}
+		return errors.Join(errs...)
+	}
+	for _, server := range servers {
+		if server == nil || !server.Enabled {
+			continue
+		}
+		serverConfig, configErr := domaintoolmcp.ServerConfig(server, o.svcCtx.SecretCipher)
+		if configErr != nil {
+			o.warnMCPServer(ctx, userID, server.ID, "解析MCP服务配置失败", configErr)
+			continue
+		}
+		opened, openErr := o.svcCtx.MCPToolService.OpenTools(ctx, serverConfig)
+		if openErr != nil {
+			o.warnMCPServer(ctx, userID, server.ID, "加载MCP工具失败", openErr)
+			continue
+		}
+		leases = append(leases, opened)
+		for _, definition := range domaintoolmcp.Definitions(server, opened.Tools()) {
+			if definition == nil {
+				continue
+			}
+			if configuredEnabled, ok := enabledByToolConfig(rows, definition.Key); ok && !configuredEnabled {
+				continue
+			}
+			tool := domaintoolmcp.NewTool(definition, opened)
+			if tool == nil {
+				continue
+			}
+			if err := filtered.Register(ctx, tool); err != nil {
+				_ = closeAll()
+				return nil, nil, fmt.Errorf("register MCP tool %q: %w", definition.Key, err)
+			}
+		}
+	}
+	if len(leases) == 0 {
+		return filtered, nil, nil
+	}
+	return filtered, closeAll, nil
+}
+
+func enabledByToolConfig(rows []*models.ToolConfig, toolKey string) (bool, bool) {
+	for _, row := range rows {
+		if row != nil && row.ToolKey == toolKey {
+			return row.Enabled, true
+		}
+	}
+	return false, false
+}
+
+func (o *Orchestrator) warnMCPServer(ctx context.Context, userID uuid.UUID, serverID uuid.UUID, message string, err error) {
+	if o == nil || o.log == nil {
+		return
+	}
+	o.log.WarnContext(ctx, message,
+		slog.String("user_id", userID.String()),
+		slog.String("server_id", serverID.String()),
+		slog.String("error", err.Error()),
+	)
 }
 
 func toolContext(ctx context.Context, svcCtx *svc.ServiceContext, userID uuid.UUID, enableKnowledge bool) (context.Context, []uuid.UUID, error) {
