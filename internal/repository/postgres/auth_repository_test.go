@@ -116,7 +116,7 @@ func newAuthTestDB(t *testing.T) *gorm.DB {
 	if url == "" {
 		t.Skip("POSTGRES_AUTH_TEST_URL is required")
 	}
-	runner, err := migration.NewRunner(migration.Config{DatabaseURL: url})
+	runner, err := migration.NewRunner(migration.Config{DatabaseURL: url}, models.MigrationModels()...)
 	if err != nil {
 		t.Fatalf("NewRunner error = %v", err)
 	}

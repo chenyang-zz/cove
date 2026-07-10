@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"strings"
 
-	"github.com/boxify/api-go/internal/models"
 	"github.com/boxify/api-go/internal/xerr"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -16,42 +15,40 @@ type Config struct {
 }
 
 type Runner struct {
-	db *gorm.DB
+	db     *gorm.DB
+	models []any
 }
 
-func NewRunner(cfg Config) (*Runner, error) {
+func NewRunner(cfg Config, migrationModels ...any) (*Runner, error) {
 	databaseURL := strings.TrimSpace(cfg.DatabaseURL)
 	if databaseURL == "" {
 		return nil, xerr.BadRequest("Postgres 连接 URL 不能为空")
+	}
+	if len(migrationModels) == 0 {
+		return nil, xerr.BadRequest("GORM migration models 不能为空")
 	}
 	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{})
 	if err != nil {
 		return nil, xerr.Wrapf(err, "打开 GORM Postgres 连接失败")
 	}
-	return &Runner{db: db}, nil
+	return newRunner(db, migrationModels...), nil
+}
+
+func newRunner(db *gorm.DB, migrationModels ...any) *Runner {
+	return &Runner{
+		db:     db,
+		models: append([]any(nil), migrationModels...),
+	}
 }
 
 func (r *Runner) Up(ctx context.Context) error {
 	if r == nil || r.db == nil {
 		return xerr.BadRequest("GORM migration runner 未初始化")
 	}
-	if err := r.db.WithContext(ctx).AutoMigrate(
-		&models.User{},
-		&models.RefreshToken{},
-		&models.ModelConfig{},
-		&models.Conversation{},
-		&models.Message{},
-		&models.MessageFeedback{},
-		&models.AgentConfig{},
-		&models.AgentPersona{},
-		&models.AgentTask{},
-		&models.MCPServer{},
-		&models.KnowledgeBase{},
-		&models.Document{},
-		&models.Image{},
-		&models.Tag{},
-		&models.Skill{},
-	); err != nil {
+	if len(r.models) == 0 {
+		return xerr.BadRequest("GORM migration models 不能为空")
+	}
+	if err := r.db.WithContext(ctx).AutoMigrate(r.models...); err != nil {
 		return xerr.Wrapf(err, "执行 GORM migration 失败")
 	}
 	return nil

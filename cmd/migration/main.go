@@ -7,6 +7,7 @@ import (
 
 	"github.com/boxify/api-go/internal/config"
 	"github.com/boxify/api-go/internal/infrastructure/db/migration"
+	"github.com/boxify/api-go/internal/models"
 )
 
 type migrator interface {
@@ -22,7 +23,10 @@ func main() {
 
 func run() error {
 	cfg := config.Load()
-	runner, err := migration.NewRunner(migration.Config{DatabaseURL: cfg.Database.URL})
+	runner, err := migration.NewRunner(
+		migration.Config{DatabaseURL: cfg.Database.URL},
+		models.MigrationModels()...,
+	)
 	if err != nil {
 		return err
 	}

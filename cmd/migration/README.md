@@ -1,6 +1,6 @@
 # cmd/migration
 
-Cove 数据库迁移工具，执行 `db/migrations/` 目录下的 SQL 迁移脚本。
+Cove 数据库迁移工具，通过 GORM `AutoMigrate` 同步数据库表结构。
 
 ## 运行
 
@@ -10,7 +10,7 @@ make migration
 go run ./cmd/migration
 ```
 
-默认执行所有待处理的向上迁移（`Up`）。
+默认执行 `models.MigrationModels()` 注册的全部持久化模型迁移。
 
 ## 依赖
 
@@ -20,11 +20,12 @@ go run ./cmd/migration
 - 配置已复制：`cp configs/config.yml.example configs/config.yml`
 - `database.url` 中的连接串可正常连接
 
-## 迁移文件
+## 模型注册
 
-SQL 迁移脚本位于 `db/migrations/`，按版本号顺序执行。
+需要迁移的 GORM 模型统一注册在 `internal/models/migration.go`。新增持久化模型时，
+将模型指针加入 `models.MigrationModels()`，migration runner 本身无需修改。
 
 ## 相关
 
 - 迁移实现：`internal/infrastructure/db/migration/`
-- 迁移脚本：`db/migrations/`
+- 模型注册：`internal/models/migration.go`

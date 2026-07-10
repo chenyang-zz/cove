@@ -3,10 +3,12 @@ package migration
 import (
 	"context"
 	"os"
-	"strings"
 	"testing"
+
+	"github.com/boxify/api-go/internal/models"
 )
 
+// TestNewRunnerRejectsBlankDatabaseURL 验证空数据库连接地址会在建立连接前被拒绝。
 func TestNewRunnerRejectsBlankDatabaseURL(t *testing.T) {
 	_, err := NewRunner(Config{DatabaseURL: "   "})
 	if err == nil {
@@ -14,25 +16,33 @@ func TestNewRunnerRejectsBlankDatabaseURL(t *testing.T) {
 	}
 }
 
-func TestRunnerUpIncludesKnowledgeBaseModel(t *testing.T) {
-	// 验证迁移清单包含知识库模型，避免 knowledge_bases 表或 color 列遗漏。
-	source, err := os.ReadFile("runner.go")
-	if err != nil {
-		t.Fatalf("read runner.go: %v", err)
-	}
-	if !strings.Contains(string(source), "&models.KnowledgeBase{}") {
-		t.Fatal("Runner.Up does not migrate models.KnowledgeBase")
+// TestNewRunnerRejectsEmptyMigrationModels 验证空模型列表会在建立数据库连接前被拒绝。
+func TestNewRunnerRejectsEmptyMigrationModels(t *testing.T) {
+	_, err := NewRunner(Config{DatabaseURL: "postgres://localhost/test"})
+	if err == nil {
+		t.Fatal("NewRunner returned nil error")
 	}
 }
 
+// TestNewRunnerCopiesMigrationModels 验证 runner 保存独立的模型切片，避免调用方后续修改影响迁移。
+func TestNewRunnerCopiesMigrationModels(t *testing.T) {
+	registered := []any{&models.User{}}
+	runner := newRunner(nil, registered...)
+	registered[0] = nil
+
+	if runner.models[0] == nil {
+		t.Fatal("newRunner stored caller-owned migration models slice")
+	}
+}
+
+// TestRunnerIntegrationWhenPostgresEnvIsConfigured 验证真实 Postgres 迁移会创建注册模型对应的表和字段。
 func TestRunnerIntegrationWhenPostgresEnvIsConfigured(t *testing.T) {
-	// 验证真实 Postgres 迁移会创建知识库表和展示字段。
 	url := os.Getenv("POSTGRES_MIGRATION_TEST_URL")
 	if url == "" {
 		t.Skip("POSTGRES_MIGRATION_TEST_URL is required")
 	}
 
-	runner, err := NewRunner(Config{DatabaseURL: url})
+	runner, err := NewRunner(Config{DatabaseURL: url}, models.MigrationModels()...)
 	if err != nil {
 		t.Fatalf("NewRunner error = %v", err)
 	}
@@ -123,5 +133,17 @@ func TestRunnerIntegrationWhenPostgresEnvIsConfigured(t *testing.T) {
 		if !exists {
 			t.Fatalf("knowledge base column %s does not exist", column)
 		}
+	}
+	var toolConfigsExists bool
+	err = db.QueryRowContext(context.Background(), `
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.tables
+			WHERE table_name = 'tool_configs'
+		)`).Scan(&toolConfigsExists)
+	if err != nil {
+		t.Fatalf("query tool_configs table: %v", err)
+	}
+	if !toolConfigsExists {
+		t.Fatal("tool_configs table does not exist")
 	}
 }

@@ -80,3 +80,8 @@ func (t *Tag) BeforeCreate(tx *gorm.DB) error {
 	ensureUUID(&t.ID)
 	return nil
 }
+
+func (t *ToolConfig) BeforeCreate(tx *gorm.DB) error {
+	ensureUUID(&t.ID)
+	return nil
+}
