@@ -309,6 +309,41 @@ func TestAnthropicClientStreamReadsTextDeltas(t *testing.T) {
 	}
 }
 
+// 验证 Anthropic 原生工具流会保留文本增量并从 input_json_delta 聚合工具参数。
+func TestAnthropicClientStreamWithToolsAggregatesToolCall(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: content_block_delta\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"查询中\"}}\n\n"))
+		_, _ = w.Write([]byte("event: content_block_start\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"search\",\"input\":{}}}\n\n"))
+		_, _ = w.Write([]byte("event: content_block_delta\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"query\\\":\\\"golang\\\"}\"}}\n\n"))
+		_, _ = w.Write([]byte("event: content_block_stop\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"content_block_stop\",\"index\":1}\n\n"))
+		_, _ = w.Write([]byte("event: message_stop\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"message_stop\"}\n\n"))
+	}))
+	defer server.Close()
+
+	client := infra.NewAnthropicLLMClient("sk-ant", "claude-sonnet-4-5", infra.WithAnthropicBaseURL(server.URL))
+	stream, err := client.(corellm.ToolStreamEventClient).StreamWithTools(context.Background(), []*corellm.Message{corellm.UserMessage("search")})
+	if err != nil {
+		t.Fatalf("StreamWithTools error = %v, want nil", err)
+	}
+	events := collectStreamEvents(stream)
+	if len(events) != 3 || events[0].Kind != corellm.StreamEventTextDelta || events[0].Text != "查询中" {
+		t.Fatalf("StreamWithTools events = %#v, want text/tool/done", events)
+	}
+	call := events[1].ToolCall
+	if events[1].Kind != corellm.StreamEventToolCall || call == nil || call.ID != "toolu_1" || call.Name != "search" || call.Input["query"] != "golang" {
+		t.Fatalf("StreamWithTools tool call = %#v, want aggregated search call", events[1])
+	}
+	if events[2].Kind != corellm.StreamEventDone {
+		t.Fatalf("StreamWithTools final event = %#v, want done", events[2])
+	}
+}
+
 // 验证 Anthropic Stream 会透传 TopP 参数。
 func TestAnthropicClientStreamSendsTopP(t *testing.T) {
 	var requestBody map[string]any

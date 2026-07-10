@@ -21,6 +21,9 @@ var ErrInvalidActionInput = errors.New("invalid action input")
 // ErrToolCallingUnsupported 表示模型客户端当前不支持原生工具调用。
 var ErrToolCallingUnsupported = errors.New("tool calling unsupported")
 
+// ErrStreamingUnsupported 表示模型客户端当前不支持结构化流式调用。
+var ErrStreamingUnsupported = errors.New("streaming unsupported")
+
 // Input 表示一次 Agent 运行的输入。
 type Input = coreagent.Input
 

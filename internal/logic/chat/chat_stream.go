@@ -164,6 +164,7 @@ func (l *ChatStreamLogic) runChatTurnBG(
 
 	var assistantMessageID string
 	toolCalls := []models.MessageToolCallMeta{}
+	sentToken := false
 	for message := range messageCh {
 		switch msg := message.(type) {
 		case *flow.AssistantMessage:
@@ -180,7 +181,7 @@ func (l *ChatStreamLogic) runChatTurnBG(
 				return
 			}
 			assistantMessageID = assistantMsg.ID.String()
-			if answer != "" {
+			if answer != "" && !sentToken {
 				_ = l.svcCtx.Realtime.Publish(ctx, topic, types.NewTokenEvent(answer))
 			}
 		case *flow.ErrorMessage:
@@ -217,6 +218,10 @@ func (l *ChatStreamLogic) runChatTurnBG(
 				})
 			}
 		case *flow.PartialMessage:
+			if msg != nil && msg.Text != "" {
+				sentToken = true
+				_ = l.svcCtx.Realtime.Publish(ctx, topic, types.NewTokenEvent(msg.Text))
+			}
 		case *flow.DoneMessage:
 			_ = l.svcCtx.Realtime.Publish(ctx, topic, types.NewDoneEvent(assistantMessageID))
 		default:

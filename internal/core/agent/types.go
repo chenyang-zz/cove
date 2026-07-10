@@ -100,6 +100,7 @@ type Hooks[D any, S any] interface {
 	BeforeTransition(ctx context.Context, state State[D, S], transition Transition) error
 	AfterTransition(ctx context.Context, state State[D, S], transition Transition) error
 	BeforeModel(ctx context.Context, state State[D, S], messages []*llm.Message) error
+	OnToken(ctx context.Context, state State[D, S], text string) error
 	AfterModel(ctx context.Context, state State[D, S], output string, modelErr error) error
 	AfterParse(ctx context.Context, state State[D, S], decision D, parseErr error) error
 	BeforeTool(ctx context.Context, state State[D, S], call ToolCall) error

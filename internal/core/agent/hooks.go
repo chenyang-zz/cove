@@ -33,6 +33,9 @@ func (NoopHooks[D, S]) BeforeModel(ctx context.Context, state State[D, S], messa
 	return nil
 }
 
+// OnToken 在模型返回可展示文本增量时调用。
+func (NoopHooks[D, S]) OnToken(ctx context.Context, state State[D, S], text string) error { return nil }
+
 // AfterModel 在模型调用后调用。
 func (NoopHooks[D, S]) AfterModel(ctx context.Context, state State[D, S], output string, modelErr error) error {
 	return nil

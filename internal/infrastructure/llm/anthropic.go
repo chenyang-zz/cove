@@ -150,6 +150,38 @@ func (c *anthropicLLMClient) InvokeWithTools(ctx context.Context, messages []*co
 }
 
 func (c *anthropicLLMClient) Stream(ctx context.Context, messages []*corellm.Message, opts ...corellm.ModelCallOption) (<-chan string, error) {
+	events, err := c.StreamEvents(ctx, messages, opts...)
+	if err != nil {
+		return nil, err
+	}
+	ch := make(chan string)
+	go func() {
+		defer close(ch)
+		for event := range events {
+			if event.Kind != corellm.StreamEventTextDelta || event.Text == "" {
+				continue
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case ch <- event.Text:
+			}
+		}
+	}()
+	return ch, nil
+}
+
+// StreamEvents 执行结构化流式文本生成。
+func (c *anthropicLLMClient) StreamEvents(ctx context.Context, messages []*corellm.Message, opts ...corellm.ModelCallOption) (<-chan corellm.StreamEvent, error) {
+	return c.streamEvents(ctx, messages, opts...)
+}
+
+// StreamWithTools 执行支持原生工具调用的结构化流式生成。
+func (c *anthropicLLMClient) StreamWithTools(ctx context.Context, messages []*corellm.Message, opts ...corellm.ModelCallOption) (<-chan corellm.StreamEvent, error) {
+	return c.streamEvents(ctx, messages, opts...)
+}
+
+func (c *anthropicLLMClient) streamEvents(ctx context.Context, messages []*corellm.Message, opts ...corellm.ModelCallOption) (<-chan corellm.StreamEvent, error) {
 	if err := c.validateChatConfig(); err != nil {
 		return nil, err
 	}
@@ -158,22 +190,65 @@ func (c *anthropicLLMClient) Stream(ctx context.Context, messages []*corellm.Mes
 		return nil, xerr.Wrapf(err, "请求模型流式接口失败")
 	}
 
-	ch := make(chan string)
+	ch := make(chan corellm.StreamEvent)
 	go func() {
 		defer close(ch)
+		toolCalls := make(map[int64]*anthropicStreamToolCall)
 		for stream.Next() {
-			chunk := stream.Current()
-			if chunk.Delta.Text == "" {
-				continue
-			}
-			select {
-			case <-ctx.Done():
+			event := stream.Current()
+			switch value := event.AsAny().(type) {
+			case anthropic.ContentBlockStartEvent:
+				if block, ok := value.ContentBlock.AsAny().(anthropic.ToolUseBlock); ok {
+					rawInput := string(block.Input)
+					// Claude 的细粒度工具流会先发送空对象，再通过 input_json_delta 补齐参数。
+					if rawInput == "{}" {
+						rawInput = ""
+					}
+					toolCalls[value.Index] = &anthropicStreamToolCall{ID: block.ID, Name: block.Name, Arguments: rawInput}
+				}
+			case anthropic.ContentBlockDeltaEvent:
+				switch delta := value.Delta.AsAny().(type) {
+				case anthropic.TextDelta:
+					if !sendStreamEvent(ctx, ch, corellm.StreamEvent{Kind: corellm.StreamEventTextDelta, Text: delta.Text}) {
+						return
+					}
+				case anthropic.InputJSONDelta:
+					if call := toolCalls[value.Index]; call != nil {
+						call.Arguments += delta.PartialJSON
+					}
+				}
+			case anthropic.ContentBlockStopEvent:
+				call := toolCalls[value.Index]
+				if call == nil {
+					continue
+				}
+				delete(toolCalls, value.Index)
+				if !sendStreamEvent(ctx, ch, corellm.StreamEvent{Kind: corellm.StreamEventToolCall, ToolCall: &corellm.LLMToolCall{
+					ID:       call.ID,
+					Name:     call.Name,
+					Input:    parseToolInput(call.Arguments),
+					RawInput: call.Arguments,
+				}}) {
+					return
+				}
+			case anthropic.MessageStopEvent:
+				sendStreamEvent(ctx, ch, corellm.StreamEvent{Kind: corellm.StreamEventDone})
 				return
-			case ch <- chunk.Delta.Text:
 			}
 		}
+		if err := stream.Err(); err != nil {
+			sendStreamEvent(ctx, ch, corellm.StreamEvent{Kind: corellm.StreamEventError, Err: xerr.Wrapf(err, "请求模型流式接口失败")})
+			return
+		}
+		sendStreamEvent(ctx, ch, corellm.StreamEvent{Kind: corellm.StreamEventDone})
 	}()
 	return ch, nil
+}
+
+type anthropicStreamToolCall struct {
+	ID        string
+	Name      string
+	Arguments string
 }
 
 func (c *anthropicLLMClient) Embed(context.Context, []string, int, ...corellm.EmbeddingOption) ([][]float64, error) {

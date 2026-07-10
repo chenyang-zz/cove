@@ -47,6 +47,11 @@ func (h *recordingHooks) BeforeModel(ctx context.Context, state State[testDecisi
 	return nil
 }
 
+func (h *recordingHooks) OnToken(ctx context.Context, state State[testDecision, testStep], text string) error {
+	h.events = append(h.events, "on_token")
+	return nil
+}
+
 func (h *recordingHooks) AfterModel(ctx context.Context, state State[testDecision, testStep], output string, modelErr error) error {
 	h.events = append(h.events, "after_model")
 	return nil

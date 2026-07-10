@@ -24,6 +24,7 @@ func (*AssistantMessage) Kind() MessageKind {
 }
 
 type PartialMessage struct {
+	// Text 是已经确认可展示的 assistant 文本增量，不包含工具协议或 ReAct 内部字段。
 	Text string
 }
 

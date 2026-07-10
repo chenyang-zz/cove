@@ -21,6 +21,12 @@ type tracePlanner interface {
 	planTrace(ctx context.Context, state State, opts ...llm.ModelCallOption) (plannerResult, error)
 }
 
+type tokenEmitter func(ctx context.Context, text string) error
+
+type streamTracePlanner interface {
+	planStreamTrace(ctx context.Context, state State, emit tokenEmitter, opts ...llm.ModelCallOption) (plannerResult, error)
+}
+
 type modelMessagePlanner interface {
 	modelMessages(ctx context.Context, state State) ([]*llm.Message, error)
 }
@@ -60,6 +66,11 @@ func (p *ReActTextPlanner) Plan(ctx context.Context, state State, opts ...llm.Mo
 
 // planTrace 调用文本模型并解析 ReAct 决策。
 func (p *ReActTextPlanner) planTrace(ctx context.Context, state State, opts ...llm.ModelCallOption) (plannerResult, error) {
+	return p.planStreamTrace(ctx, state, nil, opts...)
+}
+
+// planStreamTrace 使用结构化流读取 ReAct 原文，并且只转发 Final Answer 之后的可展示内容。
+func (p *ReActTextPlanner) planStreamTrace(ctx context.Context, state State, emit tokenEmitter, opts ...llm.ModelCallOption) (plannerResult, error) {
 	if p == nil {
 		return plannerResult{}, errors.New("react text planner is nil")
 	}
@@ -73,17 +84,47 @@ func (p *ReActTextPlanner) planTrace(ctx context.Context, state State, opts ...l
 	if err != nil {
 		return plannerResult{}, err
 	}
-	output, err := p.client.Invoke(ctx, messages, opts...)
-	if err != nil {
-		return plannerResult{Output: output}, err
+	streamClient, ok := p.client.(llm.StreamEventClient)
+	if !ok {
+		return plannerResult{}, ErrStreamingUnsupported
 	}
-	decision, err := p.parser.Parse(ctx, output)
+	events, err := streamClient.StreamEvents(ctx, messages, opts...)
 	if err != nil {
-		return plannerResult{Output: output}, err
+		return plannerResult{}, err
+	}
+	var output strings.Builder
+	visible := newFinalAnswerEmitter(emit)
+	finished := false
+	for event := range events {
+		switch event.Kind {
+		case llm.StreamEventTextDelta:
+			output.WriteString(event.Text)
+			if err := visible.Feed(ctx, event.Text); err != nil {
+				return plannerResult{Output: output.String()}, err
+			}
+		case llm.StreamEventError:
+			if event.Err == nil {
+				event.Err = errors.New("model stream failed")
+			}
+			return plannerResult{Output: output.String()}, event.Err
+		case llm.StreamEventDone:
+			finished = true
+		}
+	}
+	text := output.String()
+	if !finished {
+		if err := ctx.Err(); err != nil {
+			return plannerResult{Output: text}, err
+		}
+		return plannerResult{Output: text}, errors.New("model stream ended without terminal event")
+	}
+	decision, err := p.parser.Parse(ctx, text)
+	if err != nil {
+		return plannerResult{Output: text}, err
 	}
 	return plannerResult{
 		Decision: decision,
-		Output:   output,
+		Output:   text,
 	}, nil
 }
 
@@ -123,7 +164,16 @@ func (p *FunctionCallingPlanner) Plan(ctx context.Context, state State, opts ...
 
 // planTrace 调用支持工具调用的模型，并把输出规整为统一 Decision。
 func (p *FunctionCallingPlanner) planTrace(ctx context.Context, state State, opts ...llm.ModelCallOption) (plannerResult, error) {
+	return p.planStreamTrace(ctx, state, nil, opts...)
+}
+
+// planStreamTrace 使用原生工具调用流聚合工具参数，并即时转发供应商给出的文本增量。
+func (p *FunctionCallingPlanner) planStreamTrace(ctx context.Context, state State, emit tokenEmitter, opts ...llm.ModelCallOption) (plannerResult, error) {
 	if !p.SupportsToolCalling() {
+		return plannerResult{}, ErrToolCallingUnsupported
+	}
+	streamClient, ok := p.client.(llm.ToolStreamEventClient)
+	if !ok {
 		return plannerResult{}, ErrToolCallingUnsupported
 	}
 	messages := toolCallingMessages(state)
@@ -132,9 +182,39 @@ func (p *FunctionCallingPlanner) planTrace(ctx context.Context, state State, opt
 	if len(state.Tools) > 0 {
 		callOpts = append(callOpts, llm.WithTools(state.Tools...))
 	}
-	output, err := p.client.InvokeWithTools(ctx, messages, callOpts...)
+	events, err := streamClient.StreamWithTools(ctx, messages, callOpts...)
 	if err != nil {
-		return plannerResult{Output: outputSummary(output)}, err
+		return plannerResult{}, err
+	}
+	output := &llm.LLMResult{}
+	finished := false
+	for event := range events {
+		switch event.Kind {
+		case llm.StreamEventTextDelta:
+			output.Text += event.Text
+			if emit != nil && event.Text != "" {
+				if err := emit(ctx, event.Text); err != nil {
+					return plannerResult{Output: outputSummary(output)}, err
+				}
+			}
+		case llm.StreamEventToolCall:
+			if event.ToolCall != nil {
+				output.ToolCalls = append(output.ToolCalls, *event.ToolCall)
+			}
+		case llm.StreamEventError:
+			if event.Err == nil {
+				event.Err = errors.New("model stream failed")
+			}
+			return plannerResult{Output: outputSummary(output)}, event.Err
+		case llm.StreamEventDone:
+			finished = true
+		}
+	}
+	if !finished {
+		if err := ctx.Err(); err != nil {
+			return plannerResult{Output: outputSummary(output)}, err
+		}
+		return plannerResult{Output: outputSummary(output)}, errors.New("model stream ended without terminal event")
 	}
 	decision, err := decisionFromToolCallingOutput(output)
 	if err != nil {
@@ -186,23 +266,70 @@ func (p *AutoPlanner) Plan(ctx context.Context, state State, opts ...llm.ModelCa
 }
 
 func (p *AutoPlanner) planTrace(ctx context.Context, state State, opts ...llm.ModelCallOption) (plannerResult, error) {
+	return p.planStreamTrace(ctx, state, nil, opts...)
+}
+
+// planStreamTrace 根据模型能力以流式方式生成下一步决策。
+func (p *AutoPlanner) planStreamTrace(ctx context.Context, state State, emit tokenEmitter, opts ...llm.ModelCallOption) (plannerResult, error) {
 	if p == nil {
 		return plannerResult{}, errors.New("auto planner is nil")
 	}
 	if p.toolCallingEnabled && p.toolPlanner != nil && p.toolPlanner.SupportsToolCalling() {
-		result, err := p.toolPlanner.planTrace(ctx, state, opts...)
+		result, err := p.toolPlanner.planStreamTrace(ctx, state, emit, opts...)
 		if err == nil {
 			return result, nil
 		}
 		// 只有明确“不支持工具调用”才自动退回文本 ReAct，避免吞掉供应商调用错误。
-		if !errors.Is(err, ErrToolCallingUnsupported) || !p.fallbackToReAct {
+		if (!errors.Is(err, ErrToolCallingUnsupported) && !errors.Is(err, ErrStreamingUnsupported)) || !p.fallbackToReAct {
 			return result, err
 		}
-		fallbackResult, fallbackErr := p.reactPlanner.planTrace(ctx, state, opts...)
+		fallbackResult, fallbackErr := p.reactPlanner.planStreamTrace(ctx, state, emit, opts...)
 		fallbackResult.Fallback = true
 		return fallbackResult, fallbackErr
 	}
-	return p.reactPlanner.planTrace(ctx, state, opts...)
+	return p.reactPlanner.planStreamTrace(ctx, state, emit, opts...)
+}
+
+type finalAnswerEmitter struct {
+	emit    tokenEmitter
+	pending string
+	found   bool
+}
+
+// newFinalAnswerEmitter 创建一个只输出 ReAct 最终回答区域的增量过滤器。
+func newFinalAnswerEmitter(emit tokenEmitter) *finalAnswerEmitter {
+	return &finalAnswerEmitter{emit: emit}
+}
+
+// Feed 记录完整 ReAct 原文，并在识别到 Final Answer: 后才把增量交给调用方。
+func (e *finalAnswerEmitter) Feed(ctx context.Context, text string) error {
+	if e == nil || text == "" {
+		return nil
+	}
+	if e.found {
+		return e.send(ctx, text)
+	}
+	e.pending += text
+	const marker = "final answer:"
+	index := strings.Index(strings.ToLower(e.pending), marker)
+	if index < 0 {
+		// 保留 marker 长度的尾部，避免 marker 恰好被拆在两个流分片之间。
+		if len(e.pending) > len(marker)-1 {
+			e.pending = e.pending[len(e.pending)-(len(marker)-1):]
+		}
+		return nil
+	}
+	e.found = true
+	answer := e.pending[index+len(marker):]
+	e.pending = ""
+	return e.send(ctx, answer)
+}
+
+func (e *finalAnswerEmitter) send(ctx context.Context, text string) error {
+	if e == nil || e.emit == nil || text == "" {
+		return nil
+	}
+	return e.emit(ctx, text)
 }
 
 func (p *AutoPlanner) modelMessages(ctx context.Context, state State) ([]*llm.Message, error) {
@@ -304,6 +431,9 @@ var _ Planner = (*AutoPlanner)(nil)
 var _ tracePlanner = (*ReActTextPlanner)(nil)
 var _ tracePlanner = (*FunctionCallingPlanner)(nil)
 var _ tracePlanner = (*AutoPlanner)(nil)
+var _ streamTracePlanner = (*ReActTextPlanner)(nil)
+var _ streamTracePlanner = (*FunctionCallingPlanner)(nil)
+var _ streamTracePlanner = (*AutoPlanner)(nil)
 var _ modelMessagePlanner = (*ReActTextPlanner)(nil)
 var _ modelMessagePlanner = (*FunctionCallingPlanner)(nil)
 var _ modelMessagePlanner = (*AutoPlanner)(nil)

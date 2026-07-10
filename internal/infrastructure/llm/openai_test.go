@@ -339,6 +339,42 @@ func TestOpenAIClientStreamReadsSSEDeltaContent(t *testing.T) {
 	}
 }
 
+// 验证 OpenAI 原生工具流会保留文本增量并聚合完整的工具参数。
+func TestOpenAIClientStreamWithToolsAggregatesToolCall(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"查询中\",\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"search\",\"arguments\":\"{\\\"query\\\"\"}}]}}]}\n\n"))
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\":\\\"golang\\\"}\"}}]}}]}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	client := infra.NewOpenaiLLMClient("sk-test", "chat-model", infra.WithBaseURL(server.URL+"/v1"))
+	stream, err := client.(corellm.ToolStreamEventClient).StreamWithTools(context.Background(), []*corellm.Message{corellm.UserMessage("search")})
+	if err != nil {
+		t.Fatalf("StreamWithTools error = %v, want nil", err)
+	}
+	events := collectStreamEvents(stream)
+	if len(events) != 3 || events[0].Kind != corellm.StreamEventTextDelta || events[0].Text != "查询中" {
+		t.Fatalf("StreamWithTools events = %#v, want text/tool/done", events)
+	}
+	call := events[1].ToolCall
+	if events[1].Kind != corellm.StreamEventToolCall || call == nil || call.ID != "call_1" || call.Name != "search" || call.Input["query"] != "golang" {
+		t.Fatalf("StreamWithTools tool call = %#v, want aggregated search call", events[1])
+	}
+	if events[2].Kind != corellm.StreamEventDone {
+		t.Fatalf("StreamWithTools final event = %#v, want done", events[2])
+	}
+}
+
+func collectStreamEvents(stream <-chan corellm.StreamEvent) []corellm.StreamEvent {
+	var events []corellm.StreamEvent
+	for event := range stream {
+		events = append(events, event)
+	}
+	return events
+}
+
 // 验证 OpenAI Stream 会发送可选聊天参数。
 func TestOpenAIClientStreamSendsOptionalChatParams(t *testing.T) {
 	var requestBody map[string]any

@@ -95,7 +95,7 @@ func TestChatStreamReusesConversationAndBuildsHistory(t *testing.T) {
 func TestChatStreamSavesPartialAssistantMessageOnGenerationError(t *testing.T) {
 	userID := uuid.New()
 	llmClient := &fakeChatLLMClient{invokeResponses: []fakeInvokeResponse{{
-		text: "部分回复",
+		text: "Thought: interrupted\nFinal Answer: 部分回复",
 		err:  errors.New("model unavailable"),
 	}}}
 	svcCtx := newChatStreamTestServiceContext(t, userID, llmClient)
@@ -327,6 +327,21 @@ func (c *fakeChatLLMClient) InvokeResult(ctx context.Context, messages []*corell
 
 func (c *fakeChatLLMClient) Stream(ctx context.Context, messages []*corellm.Message, opts ...corellm.ModelCallOption) (<-chan string, error) {
 	ch := make(chan string)
+	close(ch)
+	return ch, nil
+}
+
+func (c *fakeChatLLMClient) StreamEvents(ctx context.Context, messages []*corellm.Message, opts ...corellm.ModelCallOption) (<-chan corellm.StreamEvent, error) {
+	text, err := c.Invoke(ctx, messages, opts...)
+	ch := make(chan corellm.StreamEvent, 2)
+	if text != "" {
+		ch <- corellm.StreamEvent{Kind: corellm.StreamEventTextDelta, Text: text}
+	}
+	if err != nil {
+		ch <- corellm.StreamEvent{Kind: corellm.StreamEventError, Err: err}
+	} else {
+		ch <- corellm.StreamEvent{Kind: corellm.StreamEventDone}
+	}
 	close(ch)
 	return ch, nil
 }

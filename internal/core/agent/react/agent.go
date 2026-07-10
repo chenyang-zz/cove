@@ -176,6 +176,15 @@ func (a *Agent) Run(ctx context.Context, input Input, opts ...RunOption) (*Resul
 
 // plan 调用 planner，并兼容只实现公开 Planner 接口的自定义实现。
 func (a *Agent) plan(ctx context.Context, state State, opts ...llm.ModelCallOption) (plannerResult, error) {
+	emit := func(ctx context.Context, text string) error {
+		if text == "" {
+			return nil
+		}
+		return a.base.Hooks().OnToken(ctx, a.base.CloneState(state), text)
+	}
+	if streamed, ok := a.planner.(streamTracePlanner); ok {
+		return streamed.planStreamTrace(ctx, state, emit, opts...)
+	}
 	if traced, ok := a.planner.(tracePlanner); ok {
 		return traced.planTrace(ctx, state, opts...)
 	}

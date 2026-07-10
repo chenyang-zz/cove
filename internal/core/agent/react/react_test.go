@@ -160,6 +160,34 @@ func TestAgentRunReturnsDirectFinalAnswer(t *testing.T) {
 	}
 }
 
+// 验证点：文本 ReAct 流只会转发 Final Answer 后的文本增量，不泄露协议字段。
+func TestAgentRunStreamsOnlyReActFinalAnswerTokens(t *testing.T) {
+	ctx := context.Background()
+	model := &fakeAgentLLM{streamBatches: [][]llm.StreamEvent{{
+		{Kind: llm.StreamEventTextDelta, Text: "Thought: internal\nFinal Ans"},
+		{Kind: llm.StreamEventTextDelta, Text: "wer: first"},
+		{Kind: llm.StreamEventTextDelta, Text: " second"},
+		{Kind: llm.StreamEventDone},
+	}}}
+	hooks := &recordingHooks{}
+
+	result, err := newTestAgent(model, coretool.NewRegistry(), WithToolCallingEnabled(false), WithHooks(hooks)).Run(ctx, Input{Query: "answer"})
+	if err != nil {
+		t.Fatalf("Agent.Run(stream react) error = %v, want nil", err)
+	}
+	if result.Answer != "first second" {
+		t.Fatalf("Agent.Run(stream react).Answer = %q, want first second", result.Answer)
+	}
+	if !containsInOrder(hooks.events, []string{"on_token: first", "on_token: second"}) {
+		t.Fatalf("stream token events = %#v, want only final answer deltas", hooks.events)
+	}
+	for _, event := range hooks.events {
+		if strings.Contains(event, "Thought:") || strings.Contains(event, "Action:") {
+			t.Fatalf("stream token event = %q, should not expose ReAct protocol", event)
+		}
+	}
+}
+
 // 验证点：Agent 应执行工具调用，把 Observation 写回下一轮 prompt，并最终返回答案。
 func TestAgentRunExecutesToolAndFeedsObservation(t *testing.T) {
 	ctx := context.Background()
@@ -319,6 +347,33 @@ func TestAgentRunExecutesFunctionToolCallAndFeedsSteps(t *testing.T) {
 	}
 }
 
+// 验证点：原生工具调用轮次出现文本时仍会实时发送 token，并继续执行完整工具链。
+func TestAgentRunStreamsNativeTextBeforeToolCall(t *testing.T) {
+	ctx := context.Background()
+	model := &fakeToolCallingLLM{toolOutputs: []*llm.LLMResult{
+		{Text: "我先查询。", ToolCalls: []llm.LLMToolCall{{ID: "call_1", Name: "current_time", Input: coretool.Input{}}}},
+		{Text: "现在是中午。"},
+	}}
+	registry := coretool.NewRegistry()
+	if err := registry.Register(ctx, coretool.NewFuncTool(coretool.Descriptor{Name: "current_time"}, func(context.Context, coretool.Input) (coretool.Output, error) {
+		return coretool.Output{Text: "12:00"}, nil
+	})); err != nil {
+		t.Fatalf("Registry.Register(current_time) error = %v, want nil", err)
+	}
+	hooks := &recordingHooks{}
+
+	result, err := newTestAgent(model, registry, WithHooks(hooks)).Run(ctx, Input{Query: "现在几点"})
+	if err != nil {
+		t.Fatalf("Agent.Run(native stream tool call) error = %v, want nil", err)
+	}
+	if result.Answer != "现在是中午。" {
+		t.Fatalf("Agent.Run(native stream tool call).Answer = %q, want final answer", result.Answer)
+	}
+	if !containsInOrder(hooks.events, []string{"on_token:我先查询。", "before_tool", "after_tool", "on_token:现在是中午。"}) {
+		t.Fatalf("stream and tool hook events = %#v, want text then tool then final text", hooks.events)
+	}
+}
+
 // 验证点：显式关闭 function calling 后，即使模型支持 ToolCallingClient 也应走文本 ReAct。
 func TestAgentRunDisablesToolCalling(t *testing.T) {
 	ctx := context.Background()
@@ -432,9 +487,10 @@ func newTestAgent(client llm.Client, registry *coretool.Registry, opts ...Option
 }
 
 type fakeAgentLLM struct {
-	outputs  []string
-	err      error
-	messages [][]*llm.Message
+	outputs       []string
+	err           error
+	messages      [][]*llm.Message
+	streamBatches [][]llm.StreamEvent
 }
 
 func (f *fakeAgentLLM) Invoke(ctx context.Context, messages []*llm.Message, opts ...llm.ModelCallOption) (string, error) {
@@ -460,6 +516,28 @@ func (f *fakeAgentLLM) InvokeResult(ctx context.Context, messages []*llm.Message
 
 func (f *fakeAgentLLM) Stream(ctx context.Context, messages []*llm.Message, opts ...llm.ModelCallOption) (<-chan string, error) {
 	return nil, errors.New("not implemented")
+}
+
+func (f *fakeAgentLLM) StreamEvents(ctx context.Context, messages []*llm.Message, opts ...llm.ModelCallOption) (<-chan llm.StreamEvent, error) {
+	if len(f.streamBatches) > 0 {
+		batch := f.streamBatches[0]
+		f.streamBatches = f.streamBatches[1:]
+		ch := make(chan llm.StreamEvent, len(batch))
+		for _, event := range batch {
+			ch <- event
+		}
+		close(ch)
+		return ch, nil
+	}
+	text, err := f.Invoke(ctx, messages, opts...)
+	if err != nil {
+		return nil, err
+	}
+	ch := make(chan llm.StreamEvent, 2)
+	ch <- llm.StreamEvent{Kind: llm.StreamEventTextDelta, Text: text}
+	ch <- llm.StreamEvent{Kind: llm.StreamEventDone}
+	close(ch)
+	return ch, nil
 }
 
 func (f *fakeAgentLLM) Embed(ctx context.Context, texts []string, dimensions int, opts ...llm.EmbeddingOption) ([][]float64, error) {
@@ -492,6 +570,24 @@ func (f *fakeToolCallingLLM) InvokeWithTools(ctx context.Context, messages []*ll
 	return out, nil
 }
 
+func (f *fakeToolCallingLLM) StreamWithTools(ctx context.Context, messages []*llm.Message, opts ...llm.ModelCallOption) (<-chan llm.StreamEvent, error) {
+	output, err := f.InvokeWithTools(ctx, messages, opts...)
+	if err != nil {
+		return nil, err
+	}
+	ch := make(chan llm.StreamEvent, len(output.ToolCalls)+2)
+	if output.Text != "" {
+		ch <- llm.StreamEvent{Kind: llm.StreamEventTextDelta, Text: output.Text}
+	}
+	for index := range output.ToolCalls {
+		call := output.ToolCalls[index]
+		ch <- llm.StreamEvent{Kind: llm.StreamEventToolCall, ToolCall: &call}
+	}
+	ch <- llm.StreamEvent{Kind: llm.StreamEventDone}
+	close(ch)
+	return ch, nil
+}
+
 type recordingHooks struct {
 	events []string
 }
@@ -518,6 +614,11 @@ func (h *recordingHooks) AfterTransition(ctx context.Context, state State, trans
 
 func (h *recordingHooks) BeforeModel(ctx context.Context, state State, messages []*llm.Message) error {
 	h.events = append(h.events, "before_model")
+	return nil
+}
+
+func (h *recordingHooks) OnToken(ctx context.Context, state State, text string) error {
+	h.events = append(h.events, "on_token:"+text)
 	return nil
 }
 

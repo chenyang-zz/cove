@@ -47,15 +47,19 @@ func TestOrchestratorRunEmitsAssistantAndDone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Orchestrator.Run error = %v, want nil", err)
 	}
-	if len(messages) != 2 {
-		t.Fatalf("messages len = %d, want 2", len(messages))
+	if len(messages) != 3 {
+		t.Fatalf("messages len = %d, want 3", len(messages))
 	}
-	assistant, ok := messages[0].(*flow.AssistantMessage)
+	partial, ok := messages[0].(*flow.PartialMessage)
+	if !ok || strings.TrimSpace(partial.Text) != "业务回复" {
+		t.Fatalf("first message = %#v, want assistant token", messages[0])
+	}
+	assistant, ok := messages[1].(*flow.AssistantMessage)
 	if !ok || assistant.Answer != "业务回复" {
-		t.Fatalf("first message = %#v, want assistant answer", messages[0])
+		t.Fatalf("second message = %#v, want assistant answer", messages[1])
 	}
-	if messages[1].Kind() != flow.MessageDone {
-		t.Fatalf("second message kind = %q, want %q", messages[1].Kind(), flow.MessageDone)
+	if messages[2].Kind() != flow.MessageDone {
+		t.Fatalf("third message kind = %q, want %q", messages[2].Kind(), flow.MessageDone)
 	}
 }
 
@@ -397,7 +401,7 @@ func TestToolRegistrySkipsUnavailableMCPServer(t *testing.T) {
 func TestOrchestratorRunEmitsErrorWithPartial(t *testing.T) {
 	userID := uuid.New()
 	llmClient := &fakeFlowChatLLMClient{invokeResponses: []fakeFlowInvokeResponse{{
-		text: "部分回复",
+		text: "Thought: interrupted\nFinal Answer: 部分回复",
 		err:  errors.New("model unavailable"),
 	}}}
 	svcCtx := newFlowChatTestServiceContext(t, userID, llmClient)
@@ -413,10 +417,14 @@ func TestOrchestratorRunEmitsErrorWithPartial(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Orchestrator.Run error = %v, want nil", err)
 	}
-	if len(messages) != 1 {
-		t.Fatalf("messages len = %d, want 1", len(messages))
+	if len(messages) != 2 {
+		t.Fatalf("messages len = %d, want 2", len(messages))
 	}
-	errMsg, ok := messages[0].(*flow.ErrorMessage)
+	partial, ok := messages[0].(*flow.PartialMessage)
+	if !ok || strings.TrimSpace(partial.Text) != "部分回复" {
+		t.Fatalf("first message = %#v, want partial token", messages[0])
+	}
+	errMsg, ok := messages[1].(*flow.ErrorMessage)
 	if !ok {
 		t.Fatalf("message = %#v, want ErrorMessage", messages[0])
 	}
@@ -445,8 +453,8 @@ func TestOrchestratorRunEmitsToolCallAndResultMessages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Orchestrator.Run(tool success) error = %v, want nil", err)
 	}
-	if gotKinds := flowMessageKinds(messages); !slices.Equal(gotKinds, []flow.MessageKind{flow.MessageToolCall, flow.MessageToolResult, flow.MessageAssistant, flow.MessageDone}) {
-		t.Fatalf("message kinds = %#v, want tool_call/tool_result/assistant/done", gotKinds)
+	if gotKinds := flowMessageKinds(messages); !slices.Equal(gotKinds, []flow.MessageKind{flow.MessageToolCall, flow.MessageToolResult, flow.MessagePartial, flow.MessageAssistant, flow.MessageDone}) {
+		t.Fatalf("message kinds = %#v, want tool_call/tool_result/partial/assistant/done", gotKinds)
 	}
 	call, ok := messages[0].(*flow.ToolCallMessage)
 	if !ok || call.Tool != "current_time" || call.Iteration != 1 {
@@ -477,8 +485,8 @@ func TestOrchestratorRunKeepsToolRunnerErrorAsObservation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Orchestrator.Run(tool failure) error = %v, want nil", err)
 	}
-	if gotKinds := flowMessageKinds(messages); !slices.Equal(gotKinds, []flow.MessageKind{flow.MessageToolCall, flow.MessageToolResult, flow.MessageAssistant, flow.MessageDone}) {
-		t.Fatalf("message kinds = %#v, want tool_call/tool_result/assistant/done", gotKinds)
+	if gotKinds := flowMessageKinds(messages); !slices.Equal(gotKinds, []flow.MessageKind{flow.MessageToolCall, flow.MessageToolResult, flow.MessagePartial, flow.MessageAssistant, flow.MessageDone}) {
+		t.Fatalf("message kinds = %#v, want tool_call/tool_result/partial/assistant/done", gotKinds)
 	}
 	result, ok := messages[1].(*flow.ToolResultMessage)
 	if !ok || result.Tool != "missing_tool" || result.Error != "" || !strings.Contains(result.Observation, "missing_tool") {
@@ -513,8 +521,8 @@ func TestOrchestratorRunKeepsMCPIsErrorAsObservation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Orchestrator.Run error = %v, want nil", err)
 	}
-	if gotKinds := flowMessageKinds(messages); !slices.Equal(gotKinds, []flow.MessageKind{flow.MessageToolCall, flow.MessageToolResult, flow.MessageAssistant, flow.MessageDone}) {
-		t.Fatalf("message kinds = %#v, want tool_call/tool_result/assistant/done", gotKinds)
+	if gotKinds := flowMessageKinds(messages); !slices.Equal(gotKinds, []flow.MessageKind{flow.MessageToolCall, flow.MessageToolResult, flow.MessagePartial, flow.MessageAssistant, flow.MessageDone}) {
+		t.Fatalf("message kinds = %#v, want tool_call/tool_result/partial/assistant/done", gotKinds)
 	}
 	result, ok := messages[1].(*flow.ToolResultMessage)
 	if !ok || result.Error != "" || !strings.HasPrefix(result.Observation, "tool invocation failed:\n") || !strings.Contains(result.Observation, "远端拒绝请求") || !strings.Contains(result.Observation, `"code":"bad_request"`) {
@@ -824,6 +832,21 @@ func (c *fakeFlowChatLLMClient) InvokeResult(ctx context.Context, messages []*co
 
 func (c *fakeFlowChatLLMClient) Stream(ctx context.Context, messages []*corellm.Message, opts ...corellm.ModelCallOption) (<-chan string, error) {
 	ch := make(chan string)
+	close(ch)
+	return ch, nil
+}
+
+func (c *fakeFlowChatLLMClient) StreamEvents(ctx context.Context, messages []*corellm.Message, opts ...corellm.ModelCallOption) (<-chan corellm.StreamEvent, error) {
+	text, err := c.Invoke(ctx, messages, opts...)
+	ch := make(chan corellm.StreamEvent, 2)
+	if text != "" {
+		ch <- corellm.StreamEvent{Kind: corellm.StreamEventTextDelta, Text: text}
+	}
+	if err != nil {
+		ch <- corellm.StreamEvent{Kind: corellm.StreamEventError, Err: err}
+	} else {
+		ch <- corellm.StreamEvent{Kind: corellm.StreamEventDone}
+	}
 	close(ch)
 	return ch, nil
 }

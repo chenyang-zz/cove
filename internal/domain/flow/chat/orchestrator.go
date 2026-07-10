@@ -115,7 +115,7 @@ func (o *Orchestrator) generate(ctx context.Context, input Input, events chan<- 
 		Messages: history,
 	})
 	out := generationResult{
-		Partial: hooks.lastModelOutput,
+		Partial: hooks.partial(),
 	}
 	if err != nil {
 		if out.Partial == "" && result != nil {
@@ -326,15 +326,24 @@ func composeQuery(message string, attachments []*types.MessageAttachment) string
 
 type agentHooks struct {
 	corereact.NoopHooks
-	events          chan<- flow.Message
-	lastModelOutput string
+	events   chan<- flow.Message
+	streamed strings.Builder
 }
 
-func (h *agentHooks) AfterModel(ctx context.Context, state corereact.State, output string, modelErr error) error {
-	if strings.TrimSpace(output) != "" {
-		h.lastModelOutput = strings.TrimSpace(output)
+// OnToken 将 Agent 已确认可展示的模型文本增量交给 flow。
+func (h *agentHooks) OnToken(ctx context.Context, state corereact.State, text string) error {
+	if text == "" {
+		return nil
 	}
-	return nil
+	h.streamed.WriteString(text)
+	return h.emit(ctx, &flow.PartialMessage{Text: text})
+}
+
+func (h *agentHooks) partial() string {
+	if h == nil {
+		return ""
+	}
+	return strings.TrimSpace(h.streamed.String())
 }
 
 func (h *agentHooks) BeforeTool(ctx context.Context, state corereact.State, call corereact.ToolCall) error {

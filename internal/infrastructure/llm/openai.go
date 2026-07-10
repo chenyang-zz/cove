@@ -141,6 +141,38 @@ func (c *openaiLLMClient) InvokeWithTools(ctx context.Context, messages []*corel
 }
 
 func (c *openaiLLMClient) Stream(ctx context.Context, messages []*corellm.Message, opts ...corellm.ModelCallOption) (<-chan string, error) {
+	events, err := c.StreamEvents(ctx, messages, opts...)
+	if err != nil {
+		return nil, err
+	}
+	ch := make(chan string)
+	go func() {
+		defer close(ch)
+		for event := range events {
+			if event.Kind != corellm.StreamEventTextDelta || event.Text == "" {
+				continue
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case ch <- event.Text:
+			}
+		}
+	}()
+	return ch, nil
+}
+
+// StreamEvents 执行结构化流式文本生成。
+func (c *openaiLLMClient) StreamEvents(ctx context.Context, messages []*corellm.Message, opts ...corellm.ModelCallOption) (<-chan corellm.StreamEvent, error) {
+	return c.streamEvents(ctx, messages, opts...)
+}
+
+// StreamWithTools 执行支持原生工具调用的结构化流式生成。
+func (c *openaiLLMClient) StreamWithTools(ctx context.Context, messages []*corellm.Message, opts ...corellm.ModelCallOption) (<-chan corellm.StreamEvent, error) {
+	return c.streamEvents(ctx, messages, opts...)
+}
+
+func (c *openaiLLMClient) streamEvents(ctx context.Context, messages []*corellm.Message, opts ...corellm.ModelCallOption) (<-chan corellm.StreamEvent, error) {
 	if err := c.validateChatConfig(); err != nil {
 		return nil, err
 	}
@@ -149,24 +181,70 @@ func (c *openaiLLMClient) Stream(ctx context.Context, messages []*corellm.Messag
 		return nil, xerr.Wrapf(err, "请求模型流式接口失败")
 	}
 
-	ch := make(chan string)
+	ch := make(chan corellm.StreamEvent)
 	go func() {
 		defer close(ch)
+		toolCalls := make(map[int64]*openAIStreamToolCall)
 		for stream.Next() {
 			chunk := stream.Current()
 			for _, choice := range chunk.Choices {
-				if choice.Delta.Content == "" {
-					continue
+				if choice.Delta.Content != "" {
+					if !sendStreamEvent(ctx, ch, corellm.StreamEvent{Kind: corellm.StreamEventTextDelta, Text: choice.Delta.Content}) {
+						return
+					}
 				}
-				select {
-				case <-ctx.Done():
-					return
-				case ch <- choice.Delta.Content:
+				for _, delta := range choice.Delta.ToolCalls {
+					call := toolCalls[delta.Index]
+					if call == nil {
+						call = &openAIStreamToolCall{}
+						toolCalls[delta.Index] = call
+					}
+					if delta.ID != "" {
+						call.ID = delta.ID
+					}
+					if delta.Function.Name != "" {
+						call.Name = delta.Function.Name
+					}
+					call.Arguments += delta.Function.Arguments
 				}
 			}
 		}
+		if err := stream.Err(); err != nil {
+			sendStreamEvent(ctx, ch, corellm.StreamEvent{Kind: corellm.StreamEventError, Err: xerr.Wrapf(err, "请求模型流式接口失败")})
+			return
+		}
+		for index := int64(0); ; index++ {
+			call, ok := toolCalls[index]
+			if !ok {
+				break
+			}
+			if !sendStreamEvent(ctx, ch, corellm.StreamEvent{Kind: corellm.StreamEventToolCall, ToolCall: &corellm.LLMToolCall{
+				ID:       call.ID,
+				Name:     call.Name,
+				Input:    parseToolInput(call.Arguments),
+				RawInput: call.Arguments,
+			}}) {
+				return
+			}
+		}
+		sendStreamEvent(ctx, ch, corellm.StreamEvent{Kind: corellm.StreamEventDone})
 	}()
 	return ch, nil
+}
+
+type openAIStreamToolCall struct {
+	ID        string
+	Name      string
+	Arguments string
+}
+
+func sendStreamEvent(ctx context.Context, ch chan<- corellm.StreamEvent, event corellm.StreamEvent) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case ch <- event:
+		return true
+	}
 }
 
 func (c *openaiLLMClient) chatParams(messages []*corellm.Message, opts ...corellm.ModelCallOption) openai.ChatCompletionNewParams {
