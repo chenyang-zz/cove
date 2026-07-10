@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -10,15 +11,28 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// SDKToolClient 使用官方 Go SDK 发现和调用 MCP 工具。
 type SDKToolClient struct {
 	httpClient *http.Client
 }
 
+// NewSDKToolClient 创建 SDK client；httpClient 为空时由 transport 使用默认客户端。
 func NewSDKToolClient(httpClient *http.Client) *SDKToolClient {
 	return &SDKToolClient{httpClient: httpClient}
 }
 
+// ListTools 建立一次临时 session，读取工具列表后立即关闭连接。
 func (c *SDKToolClient) ListTools(ctx context.Context, server ServerConfig) ([]ToolInfo, error) {
+	session, err := c.OpenSession(ctx, server)
+	if err != nil {
+		return nil, err
+	}
+	defer session.Close()
+	return session.ListTools(ctx)
+}
+
+// OpenSession 连接指定 MCP server，并返回可复用的 SDK session 适配器。
+func (c *SDKToolClient) OpenSession(ctx context.Context, server ServerConfig) (ToolSession, error) {
 	transport, err := c.transport(server)
 	if err != nil {
 		return nil, err
@@ -28,14 +42,65 @@ func (c *SDKToolClient) ListTools(ctx context.Context, server ServerConfig) ([]T
 	if err != nil {
 		return nil, fmt.Errorf("连接mcp服务器失败 %v", err)
 	}
-	defer session.Close()
+	return &sdkToolSession{session: session}, nil
+}
 
-	result, err := session.ListTools(ctx, &sdkmcp.ListToolsParams{})
+type sdkToolSession struct {
+	session *sdkmcp.ClientSession
+}
+
+func (s *sdkToolSession) ListTools(ctx context.Context) ([]ToolInfo, error) {
+	if s == nil || s.session == nil {
+		return nil, fmt.Errorf("mcp session is nil")
+	}
+
+	result, err := s.session.ListTools(ctx, &sdkmcp.ListToolsParams{})
 	if err != nil {
 		return nil, err
 	}
-	out := make([]ToolInfo, 0, len(result.Tools))
-	for _, tool := range result.Tools {
+	return toolInfosFromSDK(result.Tools), nil
+}
+
+func (s *sdkToolSession) CallTool(ctx context.Context, name string, input map[string]any) (*CallResult, error) {
+	if s == nil || s.session == nil {
+		return nil, fmt.Errorf("mcp session is nil")
+	}
+	result, err := s.session.CallTool(ctx, &sdkmcp.CallToolParams{Name: name, Arguments: input})
+	if err != nil {
+		return nil, err
+	}
+	out := &CallResult{
+		Content:           make([]Content, 0, len(result.Content)),
+		StructuredContent: result.StructuredContent,
+		IsError:           result.IsError,
+	}
+	for _, item := range result.Content {
+		if item == nil {
+			continue
+		}
+		data, err := json.Marshal(item)
+		if err != nil {
+			return nil, err
+		}
+		content, err := contentFromJSON(data)
+		if err != nil {
+			return nil, err
+		}
+		out.Content = append(out.Content, content)
+	}
+	return out, nil
+}
+
+func (s *sdkToolSession) Close() error {
+	if s == nil || s.session == nil {
+		return nil
+	}
+	return s.session.Close()
+}
+
+func toolInfosFromSDK(tools []*sdkmcp.Tool) []ToolInfo {
+	out := make([]ToolInfo, 0, len(tools))
+	for _, tool := range tools {
 		if tool == nil {
 			continue
 		}
@@ -49,7 +114,7 @@ func (c *SDKToolClient) ListTools(ctx context.Context, server ServerConfig) ([]T
 			Icons:        tool.Icons,
 		})
 	}
-	return out, nil
+	return out
 }
 
 func (c *SDKToolClient) transport(server ServerConfig) (sdkmcp.Transport, error) {

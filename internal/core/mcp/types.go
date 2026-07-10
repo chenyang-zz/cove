@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -36,6 +37,29 @@ type ToolInfo struct {
 	Icons        any    `json:"icons,omitempty"`
 }
 
+// Content 表示 MCP 工具调用返回的一段标准化内容。
+//
+// Raw 保留 MCP 原始 JSON，便于调用方处理 resource 等扩展内容；Data 保存已解码的
+// image/audio 二进制数据。未知内容类型仍会通过 Raw 原样保留。
+type Content struct {
+	Type     string          `json:"type"`
+	Text     string          `json:"text,omitempty"`
+	Data     []byte          `json:"data,omitempty"`
+	MIMEType string          `json:"mime_type,omitempty"`
+	URI      string          `json:"uri,omitempty"`
+	Raw      json.RawMessage `json:"raw,omitempty"`
+}
+
+// CallResult 表示一次 MCP 工具调用的标准化结果。
+//
+// IsError 为 true 表示远端工具返回了可供模型观察和纠正的业务错误，不等同于
+// transport 或 protocol error。StructuredContent 会保持远端返回的原始结构。
+type CallResult struct {
+	Content           []Content `json:"content"`
+	StructuredContent any       `json:"structured_content,omitempty"`
+	IsError           bool      `json:"is_error,omitempty"`
+}
+
 type ServerConfig struct {
 	ID         uuid.UUID
 	Transport  string
@@ -58,6 +82,41 @@ type CacheStatus struct {
 	Source      string
 	Fingerprint string
 	ExpiresAt   time.Time
+}
+
+// contentFromJSON 解析 MCP 工具调用返回的 JSON 内容，支持标准化字段和 resource 扩展字段。
+func contentFromJSON(data []byte) (Content, error) {
+	var wire struct {
+		Type     string `json:"type"`
+		Text     string `json:"text"`
+		Data     string `json:"data"`
+		MIMEType string `json:"mimeType"`
+		URI      string `json:"uri"`
+		Resource *struct {
+			URI string `json:"uri"`
+		} `json:"resource"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return Content{}, err
+	}
+	content := Content{
+		Type:     wire.Type,
+		Text:     wire.Text,
+		MIMEType: wire.MIMEType,
+		URI:      wire.URI,
+		Raw:      append(json.RawMessage(nil), data...),
+	}
+	if content.URI == "" && wire.Resource != nil {
+		content.URI = wire.Resource.URI
+	}
+	if wire.Data != "" {
+		decoded, err := base64.StdEncoding.DecodeString(wire.Data)
+		if err != nil {
+			return Content{}, err
+		}
+		content.Data = decoded
+	}
+	return content, nil
 }
 
 func Fingerprint(server ServerConfig) string {

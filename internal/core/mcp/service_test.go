@@ -30,6 +30,56 @@ type fakeToolCache struct {
 	set   *CacheEntry
 }
 
+type fakeToolSession struct {
+	tools      []ToolInfo
+	result     *CallResult
+	listErr    error
+	callErr    error
+	closeErr   error
+	listCalls  int
+	callCalls  int
+	closeCalls int
+	lastName   string
+	lastInput  map[string]any
+}
+
+func (s *fakeToolSession) ListTools(context.Context) ([]ToolInfo, error) {
+	s.listCalls++
+	if s.listErr != nil {
+		return nil, s.listErr
+	}
+	return cloneTools(s.tools), nil
+}
+
+func (s *fakeToolSession) CallTool(_ context.Context, name string, input map[string]any) (*CallResult, error) {
+	s.callCalls++
+	s.lastName = name
+	s.lastInput = input
+	if s.callErr != nil {
+		return nil, s.callErr
+	}
+	return s.result, nil
+}
+
+func (s *fakeToolSession) Close() error {
+	s.closeCalls++
+	return s.closeErr
+}
+
+type fakeSessionOpener struct {
+	session ToolSession
+	err     error
+	calls   int
+}
+
+func (o *fakeSessionOpener) OpenSession(context.Context, ServerConfig) (ToolSession, error) {
+	o.calls++
+	if o.err != nil {
+		return nil, o.err
+	}
+	return o.session, nil
+}
+
 func (c *fakeToolCache) Get(ctx context.Context, key string) (CacheEntry, bool, error) {
 	return c.entry, c.found, nil
 }
@@ -171,6 +221,117 @@ func TestServiceBuildToolListReturnsRemoteError(t *testing.T) {
 	})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("BuildToolList error = %v, want %v", err, wantErr)
+	}
+}
+
+// TestServiceRefreshToolListBypassesValidCache 验证显式刷新始终访问远端并覆盖有效 TTL 缓存。
+func TestServiceRefreshToolListBypassesValidCache(t *testing.T) {
+	server := ServerConfig{ID: uuid.New()}
+	client := &fakeToolClient{tools: []ToolInfo{{Name: "fresh"}}}
+	cache := &fakeToolCache{
+		found: true,
+		entry: CacheEntry{
+			Fingerprint: Fingerprint(server),
+			ExpiresAt:   time.Now().Add(time.Minute),
+			Tools:       []ToolInfo{{Name: "cached"}},
+		},
+	}
+
+	tools, err := NewService(Options{Client: client, Cache: cache}).RefreshToolList(context.Background(), server)
+	if err != nil {
+		t.Fatalf("RefreshToolList error = %v, want nil", err)
+	}
+	if client.calls != 1 || len(tools) != 1 || tools[0].Name != "fresh" {
+		t.Fatalf("RefreshToolList calls/tools = %d/%#v, want remote fresh tool", client.calls, tools)
+	}
+	if cache.set == nil || len(cache.set.Tools) != 1 || cache.set.Tools[0].Name != "fresh" {
+		t.Fatalf("RefreshToolList cache = %#v, want refreshed entry", cache.set)
+	}
+}
+
+// TestServiceOpenToolsUsesCacheAndLazilyOpensSession 验证缓存命中时不立即连接，并在首次调用后复用和幂等关闭 session。
+func TestServiceOpenToolsUsesCacheAndLazilyOpensSession(t *testing.T) {
+	server := ServerConfig{ID: uuid.New()}
+	session := &fakeToolSession{result: &CallResult{Content: []Content{{Type: "text", Text: "ok"}}}}
+	opener := &fakeSessionOpener{session: session}
+	cache := &fakeToolCache{
+		found: true,
+		entry: CacheEntry{
+			Fingerprint: Fingerprint(server),
+			ExpiresAt:   time.Now().Add(time.Minute),
+			Tools:       []ToolInfo{{Name: "cached"}},
+		},
+	}
+	service := NewService(Options{Client: &fakeToolClient{}, SessionOpener: opener, Cache: cache})
+
+	opened, err := service.OpenTools(context.Background(), server)
+	if err != nil {
+		t.Fatalf("OpenTools error = %v, want nil", err)
+	}
+	if opener.calls != 0 || len(opened.Tools()) != 1 || opened.Tools()[0].Name != "cached" {
+		t.Fatalf("OpenTools opener/tools = %d/%#v, want lazy cached tools", opener.calls, opened.Tools())
+	}
+	for range 2 {
+		if _, err := opened.CallTool(context.Background(), "cached", map[string]any{"q": "x"}); err != nil {
+			t.Fatalf("CallTool error = %v, want nil", err)
+		}
+	}
+	if opener.calls != 1 || session.callCalls != 2 {
+		t.Fatalf("CallTool opener/session calls = %d/%d, want 1/2", opener.calls, session.callCalls)
+	}
+	if err := opened.Close(); err != nil {
+		t.Fatalf("first Close error = %v, want nil", err)
+	}
+	if err := opened.Close(); err != nil {
+		t.Fatalf("second Close error = %v, want nil", err)
+	}
+	if session.closeCalls != 1 {
+		t.Fatalf("session close calls = %d, want 1", session.closeCalls)
+	}
+}
+
+// TestServiceOpenToolsRefreshesWithReusableSession 验证缓存失效时使用同一个 session 完成列表刷新和后续调用。
+func TestServiceOpenToolsRefreshesWithReusableSession(t *testing.T) {
+	server := ServerConfig{ID: uuid.New()}
+	session := &fakeToolSession{
+		tools:  []ToolInfo{{Name: "fresh"}},
+		result: &CallResult{Content: []Content{{Type: "text", Text: "done"}}},
+	}
+	opener := &fakeSessionOpener{session: session}
+	cache := &fakeToolCache{}
+	service := NewService(Options{Client: &fakeToolClient{}, SessionOpener: opener, Cache: cache})
+
+	opened, err := service.OpenTools(context.Background(), server)
+	if err != nil {
+		t.Fatalf("OpenTools error = %v, want nil", err)
+	}
+	if opener.calls != 1 || session.listCalls != 1 || cache.set == nil {
+		t.Fatalf("OpenTools opener/list/cache = %d/%d/%#v, want refreshed session", opener.calls, session.listCalls, cache.set)
+	}
+	if _, err := opened.CallTool(context.Background(), "fresh", nil); err != nil {
+		t.Fatalf("CallTool error = %v, want nil", err)
+	}
+	if opener.calls != 1 || session.callCalls != 1 {
+		t.Fatalf("CallTool opener/session calls = %d/%d, want 1/1", opener.calls, session.callCalls)
+	}
+	if err := opened.Close(); err != nil {
+		t.Fatalf("Close error = %v, want nil", err)
+	}
+}
+
+// TestServiceOpenToolsClosesSessionWhenRefreshFails 验证远端列举工具失败时会立即释放刚建立的 session。
+func TestServiceOpenToolsClosesSessionWhenRefreshFails(t *testing.T) {
+	want := errors.New("list failed")
+	session := &fakeToolSession{listErr: want}
+	opener := &fakeSessionOpener{session: session}
+	service := NewService(Options{Client: &fakeToolClient{}, SessionOpener: opener})
+
+	_, err := service.OpenTools(context.Background(), ServerConfig{ID: uuid.New()})
+	if !errors.Is(err, want) {
+		t.Fatalf("OpenTools error = %v, want %v", err, want)
+	}
+	if session.closeCalls != 1 {
+		t.Fatalf("session close calls = %d, want 1", session.closeCalls)
 	}
 }
 
