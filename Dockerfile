@@ -4,7 +4,7 @@
 # =============================================================================
 # Build stage: 编译 Go 二进制
 # =============================================================================
-FROM golang:1.25-alpine AS builder
+FROM registry.cn-hangzhou.aliyuncs.com/library/golang:1.25-alpine AS builder
 
 RUN apk add --no-cache git ca-certificates tzdata
 
@@ -26,7 +26,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
 # =============================================================================
 # Runtime stage: 最小化运行时镜像
 # =============================================================================
-FROM alpine:3.20
+FROM registry.cn-hangzhou.aliyuncs.com/library/alpine:3.20
 
 RUN apk add --no-cache ca-certificates tzdata wget \
     && addgroup -S cove && adduser -S cove -G cove
