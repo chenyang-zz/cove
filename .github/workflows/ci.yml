@@ -6,8 +6,39 @@ on:
   workflow_call:
 
 jobs:
+  # 计算本次变更的 .go 文件所在目录，供下游 job 增量检查使用
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    outputs:
+      go-dirs: ${{ steps.changed.outputs.dirs }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
+
+      - name: Determine changed packages
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="origin/${{ github.base_ref }}"
+          else
+            BASE="HEAD~1"
+          fi
+
+          changed_files=$(git diff --name-only "${BASE}...HEAD" -- '*.go')
+          if [ -z "$changed_files" ]; then
+            echo "dirs=" >> "$GITHUB_OUTPUT"
+            echo "无 .go 文件变更，增量检查将跳过"
+          else
+            changed_dirs=$(echo "$changed_files" | xargs -I{} dirname {} | sort -u | tr '\n' ' ')
+            echo "dirs=${changed_dirs}" >> "$GITHUB_OUTPUT"
+            echo "变更包: ${changed_dirs}"
+          fi
+
   lint:
     name: Lint
+    needs: prepare
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,10 +55,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: go vet
-        run: go vet ./...
+      - name: go vet (增量)
+        if: needs.prepare.outputs.go-dirs != ''
+        run: go vet ${{ needs.prepare.outputs.go-dirs }}
 
-      - name: gofmt check
+      - name: gofmt check (全量)
         run: |
           files=$(gofmt -l .)
           if [ -n "$files" ]; then
@@ -38,6 +70,7 @@ jobs:
 
   build:
     name: Build
+    needs: prepare
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -59,6 +92,7 @@ jobs:
 
   test:
     name: Test
+    needs: prepare
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -75,11 +109,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Run tests
-        run: go test ./... -count=1 -race
+      - name: Run tests (增量)
+        if: needs.prepare.outputs.go-dirs != ''
+        run: go test -count=1 -race ${{ needs.prepare.outputs.go-dirs }}
 
   security:
     name: Security
+    needs: prepare
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -96,8 +132,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Run govulncheck
-        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - name: Run govulncheck (增量)
+        if: needs.prepare.outputs.go-dirs != ''
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ${{ needs.prepare.outputs.go-dirs }}
 
   codegen-check:
     name: Codegen Check
