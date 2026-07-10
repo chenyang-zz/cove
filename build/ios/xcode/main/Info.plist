@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>wailsapp</string>
+    <string>Cove</string>
     <key>CFBundleIdentifier</key>
     <string>io.github.chenyangzz.cove</string>
     <key>CFBundleName</key>
