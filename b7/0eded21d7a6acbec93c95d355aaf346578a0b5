@@ -1,0 +1,19 @@
+Dockerfile
+  s_1477873f424c9f::t_666660e7ffdacc 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.11",
+  "base_commit_sha": "b70eded21d7a6acbec93c95d355aaf346578a0b5",
+  "prompts": {},
+  "sessions": {
+    "s_1477873f424c9f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_1477873f424c9f",
+        "model": "unknown"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
