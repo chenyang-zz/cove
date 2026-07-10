@@ -13,7 +13,16 @@ const (
 	Description = "Cove desktop application"
 )
 
+// devServerURL is populated only by the iOS development build. Production
+// builds leave it empty and continue to load the embedded frontend assets.
+var devServerURL string
+
 func New(assets embed.FS) *application.App {
+	windowURL := "/"
+	if devServerURL != "" {
+		windowURL = devServerURL
+	}
+
 	app := application.New(application.Options{
 		Name:        Name,
 		Description: Description,
@@ -38,7 +47,7 @@ func New(assets embed.FS) *application.App {
 			TitleBar:                application.MacTitleBarHiddenInset,
 		},
 		BackgroundColour: application.NewRGB(237, 243, 240),
-		URL:              "/",
+		URL:              windowURL,
 	})
 
 	return app
