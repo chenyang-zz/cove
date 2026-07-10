@@ -1,0 +1,24 @@
+internal/core/agent/react/react_test.go
+  s_f62bed105486b9::t_ec8207cce861a7 191-239,352-380,505-532,602-640,704-724
+  s_f62bed105486b9::t_3a98387af1fcfc 725
+internal/core/agent/react/planner.go
+  s_f62bed105486b9::t_ec8207cce861a7 67-69,71-92,96-97,105-108,190-192,194-214,218-219,226
+internal/core/agent/README.md
+  s_f62bed105486b9::t_9656f63ce2c0fa 1-446
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.11",
+  "base_commit_sha": "f82ba3aea381d7d0201826f588f92fd89e5c89bf",
+  "prompts": {},
+  "sessions": {
+    "s_f62bed105486b9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f475b-5fc8-7762-a05c-e940c241c69b",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
