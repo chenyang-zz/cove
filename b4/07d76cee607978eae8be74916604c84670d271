@@ -1,0 +1,27 @@
+internal/infrastructure/llm/anthropic_test.go
+  s_bed6061d2f5706::t_8b230c4985bef1 223-238,240-254
+  s_bed6061d2f5706::t_dc8ad4bc6f260e 239
+internal/infrastructure/llm/openai.go
+  s_bed6061d2f5706::t_dc29206c25ae2f 264
+internal/infrastructure/llm/openai_test.go
+  s_bed6061d2f5706::t_dc8ad4bc6f260e 303
+  s_bed6061d2f5706::t_8b230c4985bef1 287-302,304-318
+internal/infrastructure/llm/anthropic.go
+  s_bed6061d2f5706::t_dc29206c25ae2f 260-264
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.11",
+  "base_commit_sha": "b407d76cee607978eae8be74916604c84670d271",
+  "prompts": {},
+  "sessions": {
+    "s_bed6061d2f5706": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f1817-2478-7702-8e5a-fc4304ca0bc4",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
