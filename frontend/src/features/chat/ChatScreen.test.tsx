@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { StoredSession } from '../auth/types'
@@ -34,10 +34,13 @@ const session: StoredSession = {
 
 beforeEach(() => {
   vi.restoreAllMocks()
+  sessionStorage.clear()
   mocks.listConversations.mockReset().mockResolvedValue({ list: [] })
   mocks.listMessages.mockReset().mockResolvedValue({ list: [] })
   mocks.streamChat.mockReset()
   Element.prototype.scrollIntoView = vi.fn()
+  Element.prototype.scrollTo = vi.fn()
+  window.scrollTo = vi.fn()
 })
 
 afterEach(() => {
@@ -49,6 +52,7 @@ describe('ChatScreen', () => {
     const listeners = new Map<string, EventListener>()
     const viewport = {
       height: 844,
+      width: 390,
       offsetTop: 0,
       addEventListener: vi.fn((type: string, listener: EventListener) => listeners.set(type, listener)),
       removeEventListener: vi.fn((type: string) => listeners.delete(type)),
@@ -57,15 +61,28 @@ describe('ChatScreen', () => {
 
     const { container, unmount } = render(<ChatScreen session={session} onLogout={vi.fn()} />)
     const app = container.querySelector<HTMLElement>('.chat-app')
-    expect(app?.style.getPropertyValue('--chat-viewport-height')).toBe('844px')
+    expect(container.querySelector('.message-scroll')?.classList.contains('message-scroll--empty')).toBe(true)
+    expect(app?.dataset.keyboardOpen).toBe('false')
+    expect(app?.style.getPropertyValue('--chat-keyboard-height')).toBe('0px')
+    expect(app?.style.getPropertyValue('--chat-content-shift')).toBe('0px')
 
     viewport.height = 516
     viewport.offsetTop = 286
     act(() => listeners.get('resize')?.(new Event('resize')))
-    expect(app?.style.getPropertyValue('--chat-viewport-height')).toBe('516px')
     expect(app?.dataset.keyboardOpen).toBe('true')
+    expect(app?.style.getPropertyValue('--chat-keyboard-height')).toBe('328px')
+    expect(app?.style.getPropertyValue('--chat-content-shift')).toBe('148px')
+
+    viewport.height = 844
+    act(() => listeners.get('resize')?.(new Event('resize')))
+    expect(app?.dataset.keyboardOpen).toBe('false')
+    expect(app?.style.getPropertyValue('--chat-content-shift')).toBe('0px')
+    await waitFor(() => {
+      expect(Element.prototype.scrollTo).toHaveBeenCalledWith({ top: 0 })
+    })
 
     unmount()
+    expect(document.documentElement.classList.contains('chat-document')).toBe(false)
     expect(viewport.removeEventListener).toHaveBeenCalledWith('resize', expect.any(Function))
     vi.unstubAllGlobals()
   })
@@ -82,6 +99,47 @@ describe('ChatScreen', () => {
     expect(drawer.classList.contains('chat-drawer--open')).toBe(true)
     await user.click(screen.getAllByRole('button', { name: '关闭会话列表' })[1])
     expect(drawer.classList.contains('chat-drawer--open')).toBe(false)
+  })
+
+  it('closes the account menu when the user clicks outside or presses Escape', async () => {
+    const user = userEvent.setup()
+    render(<ChatScreen session={session} onLogout={vi.fn()} />)
+    await screen.findByRole('heading', { name: '你好，林海' })
+
+    const trigger = screen.getByRole('button', { name: '打开账户菜单' })
+    await user.click(trigger)
+    expect(screen.getByRole('menu')).toBeTruthy()
+
+    await user.click(screen.getByRole('heading', { name: '你好，林海' }))
+    expect(screen.queryByRole('menu')).toBeNull()
+
+    await user.click(trigger)
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('menu')).toBeNull()
+  })
+
+  it('focuses the composer without allowing WKWebView to scroll the page', async () => {
+    const user = userEvent.setup()
+    render(<ChatScreen session={session} onLogout={vi.fn()} />)
+    const composer = await screen.findByRole('textbox', { name: '发送给 Cove 的消息' })
+    const focus = vi.spyOn(composer, 'focus')
+
+    await user.pointer({ target: composer, keys: '[MouseLeft]' })
+
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true })
+  })
+
+  it('protects form-edge taps when the textarea remains focused after the keyboard closes', async () => {
+    render(<ChatScreen session={session} onLogout={vi.fn()} />)
+    const textarea = await screen.findByRole('textbox', { name: '发送给 Cove 的消息' })
+    const form = textarea.closest('form')
+    expect(form).toBeTruthy()
+
+    textarea.focus()
+    const focus = vi.spyOn(textarea, 'focus')
+    fireEvent.pointerDown(form as HTMLFormElement)
+
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true })
   })
 
   it('loads the latest conversation and its message history', async () => {
@@ -117,6 +175,7 @@ describe('ChatScreen', () => {
     render(<ChatScreen session={session} onLogout={vi.fn()} />)
 
     expect(await screen.findByText('我们可以先安排上午。')).toBeTruthy()
+    expect(document.querySelector('.message-scroll')?.classList.contains('message-scroll--empty')).toBe(false)
     expect(mocks.listMessages).toHaveBeenCalledWith('conversation-1')
     expect(screen.getAllByText('周末安排')).toHaveLength(2)
   })

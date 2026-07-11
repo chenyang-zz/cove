@@ -5,14 +5,16 @@
   left: 0;
   display: flex;
   width: 100%;
-  height: var(--chat-viewport-height, 100dvh);
+  height: 100%;
   min-width: 0;
   overflow: hidden;
+  overflow-anchor: none;
   background: var(--page);
   color: var(--text);
 }
 
 .chat-workspace {
+  position: relative;
   display: flex;
   flex: 1;
   min-width: 0;
@@ -147,16 +149,28 @@
   scrollbar-gutter: stable;
 }
 
+.message-scroll--empty {
+  overflow-y: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
+.chat-app[data-keyboard-open="true"] .message-scroll {
+  overflow-y: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
 .message-column {
   width: min(760px, 100%);
   min-height: 100%;
   margin: 0 auto;
-  padding: 24px 18px 34px;
+  padding: 24px 18px 170px;
 }
 
 .chat-empty {
   display: grid;
-  min-height: min(560px, 62dvh);
+  min-height: min(560px, 100%);
   padding: 54px 4px 28px;
   align-content: center;
   justify-items: start;
@@ -425,7 +439,10 @@
 }
 
 .composer-area {
-  position: relative;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 4;
   padding: 8px max(14px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
   background: linear-gradient(to bottom, color-mix(in srgb, var(--page) 0%, transparent), var(--page) 16px);
@@ -434,7 +451,7 @@
 .composer {
   width: min(720px, 100%);
   margin: 0 auto;
-  padding: 10px 10px 9px 14px;
+  padding: 9px 9px 8px 12px;
   border: 1px solid var(--border-strong);
   border-radius: 18px;
   background: var(--surface);
@@ -470,22 +487,26 @@
 
 .composer__toolbar {
   display: flex;
-  min-height: 44px;
+  min-height: 40px;
+  margin-top: 2px;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
 }
 
-.composer__toolbar > div { display: flex; gap: 2px; }
+.composer__toolbar > div {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
 
-.composer-tool,
-.send-button {
+.composer-tool {
   display: inline-grid;
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   place-items: center;
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
 .composer-tool {
@@ -494,10 +515,16 @@
   color: var(--text-muted);
 }
 
-.composer-tool:disabled { color: var(--text-soft); opacity: 0.48; }
+.composer-tool:disabled { color: var(--text-soft); opacity: 0.52; }
 
 .send-button {
+  display: inline-grid;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  place-items: center;
   border: 0;
+  border-radius: 13px;
   background: var(--accent);
   color: var(--accent-text);
   cursor: pointer;
@@ -693,11 +720,19 @@
   .chat-header__title { grid-column: 2; }
   .account-menu { grid-column: 3; }
   .message-column { padding-right: 32px; padding-left: 32px; }
+  .composer-area { left: 284px; }
   .prompt-suggestions { max-width: 460px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 899px) {
   .chat-header { padding-top: calc(6px + env(safe-area-inset-top)); min-height: calc(58px + env(safe-area-inset-top)); }
+  .message-column {
+    transform: translate3d(0, calc(-1 * var(--chat-content-shift, 0px)), 0);
+  }
+  .composer-area {
+    position: fixed;
+    transform: translate3d(0, calc(-1 * var(--chat-keyboard-height, 0px)), 0);
+  }
 }
 
 @media (max-width: 380px) {
@@ -719,7 +754,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chat-app { transition: none; }
   .chat-drawer,
   .chat-drawer-scrim { transition: none; }
   .thinking-indicator i,
@@ -728,8 +762,14 @@
   .conversation-skeleton span { animation: none; }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .chat-app {
-    transition: height 180ms cubic-bezier(0.16, 1, 0.3, 1);
+@media (max-width: 899px) and (prefers-reduced-motion: no-preference) {
+  .message-column {
+    transition: transform 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .composer-area {
+    transition:
+      transform 360ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      padding-bottom 240ms ease-out;
   }
 }

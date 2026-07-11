@@ -48,6 +48,7 @@ This project is indexed by GitNexus as **cove** (203 symbols, 353 relationships,
 - The frontend API base URL is supplied exclusively through `VITE_API_BASE_URL`; it defaults to `http://localhost:8000` when unset.
 - Configure environment-specific values in uncommitted files such as `frontend/.env.development.local` and `frontend/.env.production.local`. Do not hard-code environment URLs in application code.
 - If the `openapi.json` path changes, update this instruction at the same time.
+- When an API behavior is not documented in the OpenAPI contract, such as streaming response event types, inspect the service implementation at `/Users/sheepzhao/WorkSpace/agent/boxify/api-go` and treat it as the source of truth.
 
 ## iOS UI Debugging
 

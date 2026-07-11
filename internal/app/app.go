@@ -35,6 +35,9 @@ func New(assets embed.FS) *application.App {
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
+		IOS: application.IOSOptions{
+			DisableInputAccessoryView: true,
+		},
 	})
 
 	app.Window.NewWithOptions(application.WebviewWindowOptions{

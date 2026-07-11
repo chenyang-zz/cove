@@ -140,7 +140,91 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
 }
 @end
 // MARK: - WailsViewController
+@interface WailsViewController ()
+@property (nonatomic, assign) BOOL coveKeyboardLocksScroll;
+@property (nonatomic, assign) BOOL coveScrollEnabledBeforeKeyboard;
+@property (nonatomic, assign) BOOL coveBounceEnabledBeforeKeyboard;
+@property (nonatomic, assign) BOOL coveObservesContentOffset;
+@end
+
 @implementation WailsViewController
+
+static void *CoveContentOffsetObservationContext = &CoveContentOffsetObservationContext;
+
+- (void)coveSetKeyboardScrollLocked:(BOOL)locked {
+    UIScrollView *scrollView = self.webView.scrollView;
+    if (!scrollView) return;
+
+    if (locked) {
+        if (!self.coveKeyboardLocksScroll) {
+            self.coveScrollEnabledBeforeKeyboard = scrollView.scrollEnabled;
+            self.coveBounceEnabledBeforeKeyboard = scrollView.bounces;
+        }
+        self.coveKeyboardLocksScroll = YES;
+        scrollView.scrollEnabled = NO;
+        scrollView.bounces = NO;
+        [scrollView setContentOffset:CGPointZero animated:NO];
+        return;
+    }
+
+    if (!self.coveKeyboardLocksScroll) return;
+    self.coveKeyboardLocksScroll = NO;
+    [scrollView setContentOffset:CGPointZero animated:NO];
+    scrollView.scrollEnabled = self.coveScrollEnabledBeforeKeyboard;
+    scrollView.bounces = self.coveBounceEnabledBeforeKeyboard;
+}
+
+- (void)coveKeyboardWillChangeFrame:(NSNotification *)notification {
+    NSValue *frameValue = notification.userInfo[UIKeyboardFrameEndUserInfoKey];
+    if (!frameValue || !self.view.window) return;
+
+    CGRect keyboardFrame = [self.view convertRect:frameValue.CGRectValue fromView:nil];
+    CGRect overlap = CGRectIntersection(self.view.bounds, keyboardFrame);
+    BOOL keyboardVisible = !CGRectIsNull(overlap) && !CGRectIsEmpty(overlap) && CGRectGetHeight(overlap) > 1;
+    [self coveSetKeyboardScrollLocked:keyboardVisible];
+
+    if (keyboardVisible) {
+        NSTimeInterval duration = [notification.userInfo[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+        UIViewAnimationOptions curve =
+            ([notification.userInfo[UIKeyboardAnimationCurveUserInfoKey] integerValue] << 16) |
+            UIViewAnimationOptionBeginFromCurrentState;
+        [UIView animateWithDuration:duration delay:0 options:curve animations:^{
+            [self.webView.scrollView setContentOffset:CGPointZero animated:NO];
+        } completion:^(__unused BOOL finished) {
+            if (self.coveKeyboardLocksScroll) {
+                [self.webView.scrollView setContentOffset:CGPointZero animated:NO];
+            }
+        }];
+    }
+}
+
+- (void)coveKeyboardWillHide:(NSNotification *)notification {
+    [self coveSetKeyboardScrollLocked:NO];
+}
+
+- (void)observeValueForKeyPath:(NSString *)keyPath
+                      ofObject:(id)object
+                        change:(NSDictionary<NSKeyValueChangeKey, id> *)change
+                       context:(void *)context {
+    if (context == CoveContentOffsetObservationContext) {
+        UIScrollView *scrollView = (UIScrollView *)object;
+        if (self.coveKeyboardLocksScroll && !CGPointEqualToPoint(scrollView.contentOffset, CGPointZero)) {
+            [scrollView setContentOffset:CGPointZero animated:NO];
+        }
+        return;
+    }
+    [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    if (self.coveObservesContentOffset) {
+        [self.webView.scrollView removeObserver:self
+                                     forKeyPath:@"contentOffset"
+                                        context:CoveContentOffsetObservationContext];
+    }
+}
+
 - (instancetype)initWithWindowID:(unsigned int)windowID {
     self = [super init];
     if (self) {
@@ -166,6 +250,15 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
 }
 - (void)viewDidLoad {
     [super viewDidLoad];
+    NSNotificationCenter *notifications = [NSNotificationCenter defaultCenter];
+    [notifications addObserver:self
+                      selector:@selector(coveKeyboardWillChangeFrame:)
+                          name:UIKeyboardWillChangeFrameNotification
+                        object:nil];
+    [notifications addObserver:self
+                      selector:@selector(coveKeyboardWillHide:)
+                          name:UIKeyboardWillHideNotification
+                        object:nil];
     WKWebViewConfiguration *config = [[WKWebViewConfiguration alloc] init];
     config.suppressesIncrementalRendering = YES;
     // Application name for UA (default to "wails.io" if not set)
@@ -223,6 +316,11 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
     if (@available(iOS 11.0, *)) {
         sv.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
     }
+    [sv addObserver:self
+         forKeyPath:@"contentOffset"
+            options:NSKeyValueObservingOptionNew
+            context:CoveContentOffsetObservationContext];
+    self.coveObservesContentOffset = YES;
     // Inspector
     BOOL inspectorOn = ios_is_inspectable_disabled() ? NO : YES;
     if (@available(iOS 16.4, *)) {

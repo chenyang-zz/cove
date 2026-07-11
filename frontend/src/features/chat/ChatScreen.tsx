@@ -109,11 +109,16 @@ export function ChatScreen({ session, onLogout }: ChatScreenProps) {
   const abortRef = useRef<AbortController | null>(null)
   const skipHistoryForRef = useRef<string | null>(null)
   const viewportRootRef = useRef<HTMLElement | null>(null)
-  const endRef = useRef<HTMLDivElement | null>(null)
+  const accountMenuRef = useRef<HTMLDivElement | null>(null)
+  const messageScrollRef = useRef<HTMLDivElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const hasMessagesRef = useRef(false)
+  const keyboardHeightRef = useRef(Number(sessionStorage.getItem('cove-keyboard-height')) || 0)
+  const keyboardPreparationTimerRef = useRef<number | null>(null)
 
   const displayName = session.user.nickname || session.user.username
   const activeConversation = conversations.find((item) => item.id === selectedId)
+  const isEmptyConversation = messageState === 'ready' && messages.length === 0
 
   const loadConversations = useCallback(async (selectFirst = false) => {
     setConversationState('loading')
@@ -166,11 +171,49 @@ export function ChatScreen({ session, onLogout }: ChatScreenProps) {
   }, [loadHistory, selectedId])
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
+    hasMessagesRef.current = messages.length > 0
+    const messageScroll = messageScrollRef.current
+    messageScroll?.scrollTo({ top: messageScroll.scrollHeight, behavior: 'smooth' })
   }, [messages])
 
   useEffect(() => {
-    return () => abortRef.current?.abort()
+    return () => {
+      abortRef.current?.abort()
+      if (keyboardPreparationTimerRef.current !== null) {
+        window.clearTimeout(keyboardPreparationTimerRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!accountOpen) {
+      return
+    }
+
+    function closeAccountMenu(event: PointerEvent) {
+      if (!accountMenuRef.current?.contains(event.target as Node)) {
+        setAccountOpen(false)
+      }
+    }
+
+    function closeAccountMenuWithEscape(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setAccountOpen(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', closeAccountMenu)
+    document.addEventListener('keydown', closeAccountMenuWithEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeAccountMenu)
+      document.removeEventListener('keydown', closeAccountMenuWithEscape)
+    }
+  }, [accountOpen])
+
+  useLayoutEffect(() => {
+    document.documentElement.classList.add('chat-document')
+    window.scrollTo(0, 0)
+    return () => document.documentElement.classList.remove('chat-document')
   }, [])
 
   useLayoutEffect(() => {
@@ -181,12 +224,43 @@ export function ChatScreen({ session, onLogout }: ChatScreenProps) {
     }
     const activeRoot = root
     const activeViewport = viewport
+    let layoutHeight = Math.max(window.innerHeight, activeViewport.height)
+    let layoutWidth = activeViewport.width
 
     function syncVisualViewport() {
-      activeRoot.style.setProperty('--chat-viewport-height', `${activeViewport.height}px`)
-      activeRoot.dataset.keyboardOpen = String(
-        window.innerHeight - activeViewport.height > 120,
-      )
+      const widthChanged = Math.abs(activeViewport.width - layoutWidth) > 1
+      if (widthChanged) {
+        layoutHeight = activeViewport.height
+        layoutWidth = activeViewport.width
+      }
+
+      layoutHeight = Math.max(layoutHeight, window.innerHeight, activeViewport.height)
+      const keyboardHeight = Math.max(0, layoutHeight - activeViewport.height)
+      const contentShift = Math.round(Math.min(160, keyboardHeight * 0.45))
+      const keyboardOpen = keyboardHeight > 20
+      if (!keyboardOpen && activeViewport.height > layoutHeight) {
+        layoutHeight = activeViewport.height
+      }
+
+      activeRoot.style.setProperty('--chat-keyboard-height', `${keyboardHeight}px`)
+      activeRoot.style.setProperty('--chat-content-shift', `${contentShift}px`)
+      activeRoot.dataset.keyboardOpen = String(keyboardOpen)
+      if (keyboardOpen) {
+        keyboardHeightRef.current = keyboardHeight
+        sessionStorage.setItem('cove-keyboard-height', String(keyboardHeight))
+        if (keyboardPreparationTimerRef.current !== null) {
+          window.clearTimeout(keyboardPreparationTimerRef.current)
+          keyboardPreparationTimerRef.current = null
+        }
+        window.requestAnimationFrame(() => {
+          const messageScroll = messageScrollRef.current
+          messageScroll?.scrollTo({ top: messageScroll.scrollHeight })
+        })
+      } else if (!hasMessagesRef.current) {
+        window.requestAnimationFrame(() => {
+          messageScrollRef.current?.scrollTo({ top: 0 })
+        })
+      }
     }
 
     syncVisualViewport()
@@ -195,6 +269,57 @@ export function ChatScreen({ session, onLogout }: ChatScreenProps) {
       activeViewport.removeEventListener('resize', syncVisualViewport)
     }
   }, [])
+
+  function focusComposerWithoutScroll(textarea: HTMLTextAreaElement) {
+    const root = viewportRootRef.current
+    const viewport = window.visualViewport
+    if (root && viewport && viewport.width < 900) {
+      const anticipatedHeight =
+        keyboardHeightRef.current || Math.min(360, Math.max(260, window.innerHeight * 0.38))
+      const anticipatedContentShift = Math.round(Math.min(160, anticipatedHeight * 0.45))
+      const heightBeforeFocus = viewport.height
+      root.style.setProperty('--chat-keyboard-height', `${anticipatedHeight}px`)
+      root.dataset.keyboardOpen = 'true'
+      void root.offsetHeight
+
+      if (keyboardPreparationTimerRef.current !== null) {
+        window.clearTimeout(keyboardPreparationTimerRef.current)
+      }
+      keyboardPreparationTimerRef.current = window.setTimeout(() => {
+        if (viewport.height >= heightBeforeFocus - 20) {
+          root.style.setProperty('--chat-keyboard-height', '0px')
+          root.style.setProperty('--chat-content-shift', '0px')
+          root.dataset.keyboardOpen = 'false'
+        }
+        keyboardPreparationTimerRef.current = null
+      }, 650)
+      window.requestAnimationFrame(() => {
+        root.style.setProperty('--chat-content-shift', `${anticipatedContentShift}px`)
+      })
+    }
+    textarea.focus({ preventScroll: true })
+  }
+
+  function handleComposerSurfacePress(event: {
+    target: EventTarget | null
+    preventDefault: () => void
+  }) {
+    const root = viewportRootRef.current
+    const textarea = textareaRef.current
+    const target = event.target
+    if (
+      !root ||
+      !textarea ||
+      !(target instanceof Element) ||
+      target.closest('button') ||
+      root.dataset.keyboardOpen === 'true'
+    ) {
+      return
+    }
+
+    event.preventDefault()
+    focusComposerWithoutScroll(textarea)
+  }
 
   function startNewConversation() {
     abortRef.current?.abort()
@@ -205,7 +330,12 @@ export function ChatScreen({ session, onLogout }: ChatScreenProps) {
     setMessageError('')
     setStreamState({ status: 'idle' })
     setDrawerOpen(false)
-    window.requestAnimationFrame(() => textareaRef.current?.focus())
+    window.requestAnimationFrame(() => {
+      const textarea = textareaRef.current
+      if (textarea) {
+        focusComposerWithoutScroll(textarea)
+      }
+    })
   }
 
   function selectConversation(conversationId: string) {
@@ -415,19 +545,19 @@ export function ChatScreen({ session, onLogout }: ChatScreenProps) {
 
       <section className="chat-workspace">
         <header className="chat-header">
-          <button className="icon-button chat-header__menu" type="button" aria-label="打开会话列表" onClick={() => setDrawerOpen(true)}>
+          <button className="icon-button chat-header__menu" type="button" aria-label="打开会话列表" onClick={() => { setAccountOpen(false); setDrawerOpen(true) }}>
             <List size={22} />
           </button>
           <div className="chat-header__title">
             <strong>{activeConversation?.title || '新对话'}</strong>
             <span>{streamState.status === 'streaming' ? 'Cove 正在回复' : 'Cove AI'}</span>
           </div>
-          <div className="account-menu">
+          <div className="account-menu" ref={accountMenuRef}>
             <button className="icon-button" type="button" aria-label="打开账户菜单" aria-expanded={accountOpen} onClick={() => setAccountOpen((open) => !open)}>
               <DotsThree size={24} weight="bold" />
             </button>
             {accountOpen && (
-              <div className="account-menu__popover">
+              <div className="account-menu__popover" role="menu">
                 <div>
                   <strong>{displayName}</strong>
                   <span>{session.user.email || `@${session.user.username}`}</span>
@@ -441,7 +571,11 @@ export function ChatScreen({ session, onLogout }: ChatScreenProps) {
           </div>
         </header>
 
-        <div className="message-scroll" aria-busy={messageState === 'loading'}>
+        <div
+          className={isEmptyConversation ? 'message-scroll message-scroll--empty' : 'message-scroll'}
+          ref={messageScrollRef}
+          aria-busy={messageState === 'loading'}
+        >
           <div className="message-column" role="log" aria-live="polite" aria-relevant="additions text">
             {messageState === 'loading' && (
               <div className="message-skeleton" aria-label="正在加载消息">
@@ -527,19 +661,41 @@ export function ChatScreen({ session, onLogout }: ChatScreenProps) {
                 </button>
               </div>
             )}
-            <div ref={endRef} />
+            <div />
           </div>
         </div>
 
         <footer className="composer-area">
-          <form className="composer" onSubmit={handleSubmit}>
+          <form
+            className="composer"
+            onSubmit={handleSubmit}
+            onTouchStartCapture={handleComposerSurfacePress}
+            onPointerDownCapture={handleComposerSurfacePress}
+          >
             <textarea
               ref={textareaRef}
               rows={1}
               value={draft}
               placeholder="问问 Cove..."
               aria-label="发送给 Cove 的消息"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="sentences"
+              spellCheck={false}
+              enterKeyHint="send"
               disabled={streamState.status === 'streaming'}
+              onTouchStart={(event) => {
+                if (document.activeElement !== event.currentTarget) {
+                  event.preventDefault()
+                  focusComposerWithoutScroll(event.currentTarget)
+                }
+              }}
+              onPointerDown={(event) => {
+                if (document.activeElement !== event.currentTarget) {
+                  event.preventDefault()
+                  focusComposerWithoutScroll(event.currentTarget)
+                }
+              }}
               onFocus={() => setAccountOpen(false)}
               onChange={(event) => handleDraftChange(event.target.value)}
               onKeyDown={handleComposerKeyDown}
@@ -547,17 +703,17 @@ export function ChatScreen({ session, onLogout }: ChatScreenProps) {
             <div className="composer__toolbar">
               <div>
                 <button className="composer-tool" type="button" disabled aria-label="添加附件，暂未开放" title="附件功能即将开放">
-                  <Paperclip size={19} />
+                  <Paperclip size={18} />
                 </button>
                 <button className="composer-tool" type="button" disabled aria-label="知识库，暂未开放" title="知识库功能即将开放">
-                  <Books size={19} />
+                  <Books size={18} />
                 </button>
                 <button className="composer-tool" type="button" disabled aria-label="联网搜索，暂未开放" title="联网搜索功能即将开放">
-                  <GlobeHemisphereWest size={19} />
+                  <GlobeHemisphereWest size={18} />
                 </button>
               </div>
               <button className="send-button" type="submit" aria-label="发送消息" disabled={!draft.trim() || streamState.status === 'streaming'}>
-                <ArrowUp size={20} weight="bold" />
+                <ArrowUp size={19} weight="bold" />
               </button>
             </div>
           </form>

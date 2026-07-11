@@ -306,6 +306,7 @@ tasks:
         cp "{{.BIN_DIR}}/{{.APP_NAME | lower}}" "$APP_BUNDLE/{{.APP_NAME | lower}}"
         cp build/ios/xcode/main/Info.plist "$APP_BUNDLE/Info.plist"
         /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable {{.APP_NAME | lower}}" "$APP_BUNDLE/Info.plist"
+        /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoadsInWebContent bool true" "$APP_BUNDLE/Info.plist"
         codesign --force --sign - "$APP_BUNDLE"
         xcrun simctl install booted "$APP_BUNDLE"
         xcrun simctl launch --terminate-running-process booted "{{.IOS_BUNDLE_ID}}"
