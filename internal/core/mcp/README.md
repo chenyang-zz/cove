@@ -38,6 +38,7 @@ mcpService := mcp.NewService(
     mcp.WithFailCooldown(30 * time.Second),    // 可选，失败冷却
 )
 // 生产默认：mcp.NewService()
+// 业务启动时也可从 configs.mcp 解析后注入 WithTTL / WithDiscoverTimeout / WithFailCooldown。
 ```
 
 | 方法 | 说明 |

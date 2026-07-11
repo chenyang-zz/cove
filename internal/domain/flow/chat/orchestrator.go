@@ -11,6 +11,7 @@ import (
 
 	"log/slog"
 
+	"github.com/boxify/api-go/internal/config"
 	corereact "github.com/boxify/api-go/internal/core/agent/react"
 	"github.com/boxify/api-go/internal/core/llm"
 	coremcp "github.com/boxify/api-go/internal/core/mcp"
@@ -44,12 +45,6 @@ const (
 	defaultMCPAssembleBudget = 8 * time.Second
 	// defaultMCPAssembleConcurrency 限制同时 OpenTools 的 MCP server 数，对齐 toolconfig。
 	defaultMCPAssembleConcurrency = 4
-)
-
-// 测试可覆盖的组装参数；生产路径使用默认值。
-var (
-	mcpAssembleBudget      = defaultMCPAssembleBudget
-	mcpAssembleConcurrency = defaultMCPAssembleConcurrency
 )
 
 // mcpServerWork 表示一个已解密、待并行发现的 MCP server。
@@ -256,15 +251,8 @@ func (o *Orchestrator) toolRegistry(ctx context.Context, userID uuid.UUID, kbIDs
 		return filtered, nil, nil
 	}
 
-	// Phase 1：有限并行发现，墙钟受 mcpAssembleBudget 约束。
-	budget := mcpAssembleBudget
-	if budget <= 0 {
-		budget = defaultMCPAssembleBudget
-	}
-	concurrency := mcpAssembleConcurrency
-	if concurrency <= 0 {
-		concurrency = defaultMCPAssembleConcurrency
-	}
+	// Phase 1：有限并行发现，墙钟与并发度来自 config.MCP（非法/零值回落默认）。
+	budget, concurrency := mcpAssembleSettings(o.svcCtx.Config)
 	mcpCtx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 
@@ -375,6 +363,21 @@ func (o *Orchestrator) warnMCPAssembleBudget(ctx context.Context, userID uuid.UU
 		slog.Int("opened_ok", openedOK),
 		slog.Int("failed_or_skipped", failed),
 	)
+}
+
+// mcpAssembleSettings 从配置解析对话组装预算与并发度；解析失败或非正值时回落默认。
+func mcpAssembleSettings(cfg config.Config) (time.Duration, int) {
+	budget := defaultMCPAssembleBudget
+	if cfg.MCP.AssembleBudget != "" {
+		if d, err := time.ParseDuration(cfg.MCP.AssembleBudget); err == nil && d > 0 {
+			budget = d
+		}
+	}
+	concurrency := defaultMCPAssembleConcurrency
+	if cfg.MCP.AssembleConcurrency > 0 {
+		concurrency = cfg.MCP.AssembleConcurrency
+	}
+	return budget, concurrency
 }
 
 func toolContext(ctx context.Context, svcCtx *svc.ServiceContext, userID uuid.UUID, enableKnowledge bool) (context.Context, []uuid.UUID, error) {

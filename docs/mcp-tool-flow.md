@@ -317,9 +317,10 @@ toolRegistry(ctx, userID)
                   └─ Register 硬错误 → closeAll + return error
 ```
 
-**组装预算**：多 server 发现墙钟上限默认 8s，避免串行叠加；单 server 仍受
-`core/mcp` DiscoverTimeout（5s）与 FailCooldown 约束。并发度默认 4，与配置页
-`mcpRefreshConcurrencyMax` 对齐。
+**组装预算**：多 server 发现墙钟与并发度由 `configs.mcp` 控制（默认
+`assemble_budget=8s`、`assemble_concurrency=4`）；单 server 仍受
+`tools_cache_ttl` / `discover_timeout` / `fail_cooldown` 约束。可在
+`configs/config.yml` 或环境变量 `MCP_*` 中覆盖。
 
 **连接管理**：所有成功的 `OpenedTools` lease 在 Wait 后统一收集，通过 `closeAll`
 闭包在 `generate()` 结束时关闭（defer）；Register 失败路径也会释放本轮全部 lease。

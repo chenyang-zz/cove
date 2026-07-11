@@ -399,10 +399,6 @@ func TestToolRegistrySkipsUnavailableMCPServer(t *testing.T) {
 
 // TestToolRegistryOpensMCPServersInParallel 验证多个慢 MCP server 并行发现，墙钟接近单次超时而非 N 倍串行。
 func TestToolRegistryOpensMCPServersInParallel(t *testing.T) {
-	prevBudget := mcpAssembleBudget
-	mcpAssembleBudget = 80 * time.Millisecond
-	t.Cleanup(func() { mcpAssembleBudget = prevBudget })
-
 	userID := uuid.New()
 	servers := []*models.MCPServer{
 		{ID: uuid.New(), UserID: userID, Name: "s1", Enabled: true},
@@ -411,6 +407,7 @@ func TestToolRegistryOpensMCPServersInParallel(t *testing.T) {
 	}
 	opener := &fakeFlowMCPOpener{block: true}
 	svcCtx := newFlowChatTestServiceContext(t, userID, &fakeFlowChatLLMClient{})
+	svcCtx.Config.MCP.AssembleBudget = "80ms"
 	svcCtx.MCPServerRepo.(*fakeFlowMCPServerRepo).rows = servers
 	svcCtx.MCPToolService = coremcp.NewService(
 		coremcp.WithSessionOpener(opener),
@@ -440,14 +437,6 @@ func TestToolRegistryOpensMCPServersInParallel(t *testing.T) {
 
 // TestToolRegistryMCPAssembleConcurrencyCap 验证并行 OpenTools 受并发上限约束。
 func TestToolRegistryMCPAssembleConcurrencyCap(t *testing.T) {
-	prevBudget, prevConc := mcpAssembleBudget, mcpAssembleConcurrency
-	mcpAssembleBudget = 200 * time.Millisecond
-	mcpAssembleConcurrency = 2
-	t.Cleanup(func() {
-		mcpAssembleBudget = prevBudget
-		mcpAssembleConcurrency = prevConc
-	})
-
 	userID := uuid.New()
 	servers := make([]*models.MCPServer, 0, 5)
 	for i := range 5 {
@@ -457,6 +446,8 @@ func TestToolRegistryMCPAssembleConcurrencyCap(t *testing.T) {
 	}
 	opener := &fakeFlowMCPOpener{block: true}
 	svcCtx := newFlowChatTestServiceContext(t, userID, &fakeFlowChatLLMClient{})
+	svcCtx.Config.MCP.AssembleBudget = "200ms"
+	svcCtx.Config.MCP.AssembleConcurrency = 2
 	svcCtx.MCPServerRepo.(*fakeFlowMCPServerRepo).rows = servers
 	svcCtx.MCPToolService = coremcp.NewService(
 		coremcp.WithSessionOpener(opener),
