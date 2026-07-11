@@ -10,6 +10,11 @@ type CreateConversationRequest struct {
 	Title *string `json:"title" binding:"omitempty,min=1,max=256"`
 }
 
+// ListConversationsRequest 分页获取会话列表。
+type ListConversationsRequest struct {
+	PageRequest
+}
+
 type UriConversationIDRequest struct {
 	ConversationID string `uri:"conversation_id" binding:"required"`
 }

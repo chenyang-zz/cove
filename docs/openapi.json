@@ -1588,7 +1588,26 @@
     },
     "/api/conversation": {
       "get": {
+        "description": "分页获取会话列表",
         "operationId": "conversationListConversations",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -1605,6 +1624,15 @@
                             "$ref": "#/components/schemas/ConversationResponse"
                           },
                           "type": "array"
+                        },
+                        "page": {
+                          "type": "integer"
+                        },
+                        "page_size": {
+                          "type": "integer"
+                        },
+                        "total": {
+                          "type": "integer"
                         }
                       },
                       "type": "object"

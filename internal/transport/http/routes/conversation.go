@@ -15,7 +15,10 @@ func RegisterConversationRoutes(api *gin.RouterGroup, conversation handler.Conve
 	conversationRoutes := api.Group("/conversation", authMiddleware)
 	// routegen: auth user_id input=request.CreateConversationRequest output=response.ConversationResponse
 	conversationRoutes.POST("/", conversation.CreateConversation)
-	// routegen: auth user_id output=response.ListResponse[*response.ConversationResponse]
+	// @auth(user_id)
+	// @description 分页获取会话列表
+	// @input request.ListConversationsRequest
+	// @output response.PageListResponse[*response.ConversationResponse]
 	conversationRoutes.GET("/", conversation.ListConversations)
 	// @auth(user_id)
 	// @description 重命名会话

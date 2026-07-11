@@ -527,6 +527,10 @@ func (r *fakeChatConversationRepo) List(ctx context.Context, userID uuid.UUID) (
 	return nil, nil
 }
 
+func (r *fakeChatConversationRepo) PageList(ctx context.Context, userID uuid.UUID, query repository.ConversationListQuery) ([]*models.Conversation, int64, error) {
+	return nil, 0, nil
+}
+
 func (r *fakeChatConversationRepo) FindByID(ctx context.Context, userID uuid.UUID, conversationID uuid.UUID) (*models.Conversation, error) {
 	for _, row := range r.rows {
 		if row.UserID == userID && row.ID == conversationID {

@@ -52,6 +52,24 @@ func (r *fakeConversationRepository) List(ctx context.Context, userID uuid.UUID)
 	return out, nil
 }
 
+func (r *fakeConversationRepository) PageList(ctx context.Context, userID uuid.UUID, query repository.ConversationListQuery) ([]*models.Conversation, int64, error) {
+	r.listUserID = userID
+	all, err := r.List(ctx, userID)
+	if err != nil {
+		return nil, 0, err
+	}
+	total := int64(len(all))
+	limit, offset := query.LimitOffset(20)
+	if offset >= len(all) {
+		return []*models.Conversation{}, total, nil
+	}
+	end := offset + limit
+	if end > len(all) {
+		end = len(all)
+	}
+	return all[offset:end], total, nil
+}
+
 func (r *fakeConversationRepository) FindByID(ctx context.Context, userID uuid.UUID, conversationID uuid.UUID) (*models.Conversation, error) {
 	row, ok := r.rows[conversationID]
 	if !ok || row.UserID != userID {
@@ -110,6 +128,7 @@ func TestCreateConversationUsesAuthenticatedUserAndDefaultTitle(t *testing.T) {
 	}
 }
 
+// 验证 ListConversations 分页只返回当前用户会话并带 total/page 元信息。
 func TestListConversationsUsesAuthenticatedUser(t *testing.T) {
 	userID := uuid.New()
 	otherUserID := uuid.New()
@@ -119,15 +138,41 @@ func TestListConversationsUsesAuthenticatedUser(t *testing.T) {
 	)
 	logic := NewListConversationsLogic(context.Background(), &svc.ServiceContext{ConversationRepo: repo})
 
-	out, err := logic.ListConversations(userID)
+	out, err := logic.ListConversations(userID, &request.ListConversationsRequest{
+		PageRequest: request.PageRequest{Page: 1, PageSize: 20},
+	})
 	if err != nil {
 		t.Fatalf("ListConversations error = %v", err)
 	}
 	if repo.listUserID != userID {
 		t.Fatalf("list userID = %s, want %s", repo.listUserID, userID)
 	}
+	if out.Total != 1 || out.Page != 1 || out.PageSize != 20 {
+		t.Fatalf("page meta = total:%d page:%d page_size:%d, want 1/1/20", out.Total, out.Page, out.PageSize)
+	}
 	if len(out.List) != 1 || out.List[0].Title != "mine" {
 		t.Fatalf("list = %+v, want only authenticated user's conversations", out.List)
+	}
+}
+
+// 验证 ListConversations 分页截断。
+func TestListConversationsPaginates(t *testing.T) {
+	userID := uuid.New()
+	repo := newFakeConversationRepository(
+		&models.Conversation{ID: uuid.New(), UserID: userID, Title: "a"},
+		&models.Conversation{ID: uuid.New(), UserID: userID, Title: "b"},
+		&models.Conversation{ID: uuid.New(), UserID: userID, Title: "c"},
+	)
+	logic := NewListConversationsLogic(context.Background(), &svc.ServiceContext{ConversationRepo: repo})
+
+	out, err := logic.ListConversations(userID, &request.ListConversationsRequest{
+		PageRequest: request.PageRequest{Page: 1, PageSize: 2},
+	})
+	if err != nil {
+		t.Fatalf("ListConversations error = %v", err)
+	}
+	if out.Total != 3 || len(out.List) != 2 {
+		t.Fatalf("ListConversations total=%d len=%d, want total 3 len 2", out.Total, len(out.List))
 	}
 }
 

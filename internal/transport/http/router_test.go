@@ -469,6 +469,23 @@ func (r *testConversationRepository) List(ctx context.Context, userID uuid.UUID)
 	return out, nil
 }
 
+func (r *testConversationRepository) PageList(ctx context.Context, userID uuid.UUID, query repository.ConversationListQuery) ([]*models.Conversation, int64, error) {
+	all, err := r.List(ctx, userID)
+	if err != nil {
+		return nil, 0, err
+	}
+	total := int64(len(all))
+	limit, offset := query.LimitOffset(20)
+	if offset >= len(all) {
+		return []*models.Conversation{}, total, nil
+	}
+	end := offset + limit
+	if end > len(all) {
+		end = len(all)
+	}
+	return all[offset:end], total, nil
+}
+
 func (r *testConversationRepository) FindByID(ctx context.Context, userID uuid.UUID, conversationID uuid.UUID) (*models.Conversation, error) {
 	for _, row := range r.rows {
 		if row.ID == conversationID && row.UserID == userID {
