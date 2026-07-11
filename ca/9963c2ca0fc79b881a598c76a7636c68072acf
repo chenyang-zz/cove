@@ -1,0 +1,23 @@
+docs/mcp-tool-flow.md
+  s_12484400b1db22::t_5c90a9557c6e77 302,304,306-311,313-317,320-325,406-407,431
+internal/domain/flow/chat/orchestrator.go
+  s_12484400b1db22::t_333c5a740f9f31 9-10,40-66,241-296,306-312,315-316,319-320,327,337-339,367-379
+internal/domain/flow/chat/orchestrator_test.go
+  s_12484400b1db22::t_a283609c5238f1 400-519,775-783,786-787,789-816,818-833
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "ca9963c2ca0fc79b881a598c76a7636c68072acf",
+  "prompts": {},
+  "sessions": {
+    "s_12484400b1db22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_12484400b1db22",
+        "model": "unknown"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
