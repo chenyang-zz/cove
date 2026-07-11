@@ -103,6 +103,17 @@ jobs:
       DEPLOY_ALIYUN_USERNAME: ${{ secrets.DEPLOY_ALIYUN_USERNAME }}
       DEPLOY_ALIYUN_PASSWORD: ${{ secrets.DEPLOY_ALIYUN_PASSWORD }}
     steps:
+      # 仅输出 GitHub Runner 实际收到的 SSH 主机公钥指纹，用于排查 fingerprint 不匹配。
+      - name: Diagnose SSH host key fingerprint
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || 22 }}
+        run: |
+          set -euo pipefail
+          keys=$(ssh-keyscan -T 10 -p "$DEPLOY_PORT" -t ed25519,ecdsa,rsa "$DEPLOY_HOST" 2>/dev/null)
+          test -n "$keys"
+          printf '%s\n' "$keys" | ssh-keygen -lf - -E sha256
+
       - name: Deploy the immutable Alibaba Cloud release through SSH
         uses: appleboy/ssh-action@v1.2.5
         env:
