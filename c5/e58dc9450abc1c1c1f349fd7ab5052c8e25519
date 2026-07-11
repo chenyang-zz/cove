@@ -1,0 +1,19 @@
+.github/workflows/cd.yml
+  s_f7d54bb685014d::t_28a4963e556353 3,6-7,22,32,40,47,53-67,71-77,131,150,154-155,159,163-167,171
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "c5e58dc9450abc1c1c1f349fd7ab5052c8e25519",
+  "prompts": {},
+  "sessions": {
+    "s_f7d54bb685014d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_f7d54bb685014d",
+        "model": "unknown"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
