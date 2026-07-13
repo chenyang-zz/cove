@@ -1,0 +1,21 @@
+go.mod
+  s_777d25ebeef1cc::t_85c119d845933c 82
+go.sum
+  s_777d25ebeef1cc::t_534593d23f66a3 151-152
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "e18f243190df424b257ea8fe993282cd06553caf",
+  "prompts": {},
+  "sessions": {
+    "s_777d25ebeef1cc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4ab7-0862-7662-b3a9-fd131a4869a3",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
