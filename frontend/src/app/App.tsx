@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import './App.css'
 import { AuthScreen } from '../features/auth/AuthScreen'
 import { clearSession, restoreSession } from '../features/auth/api'
 import type { StoredSession } from '../features/auth/types'
 import { ChatScreen } from '../features/chat/ChatScreen'
+import { ProfileScreen } from '../features/profile/ProfileScreen'
 
 const coveIcon = '/cove-mark.svg'
 
@@ -15,10 +16,27 @@ type AuthState =
 type AuthenticatedAppProps = {
   session: StoredSession
   onLogout: () => void
+  onSessionChange: (session: StoredSession) => void
 }
 
-function AuthenticatedApp({ session, onLogout }: AuthenticatedAppProps) {
-  return <ChatScreen session={session} onLogout={onLogout} />
+export function AuthenticatedApp({ session, onLogout, onSessionChange }: AuthenticatedAppProps) {
+  const [profileOpen, setProfileOpen] = useState(false)
+
+  return (
+    <div className="authenticated-app">
+      <div className="authenticated-app__chat" aria-hidden={profileOpen} inert={profileOpen ? true : undefined}>
+        <ChatScreen session={session} onLogout={onLogout} onOpenProfile={() => setProfileOpen(true)} />
+      </div>
+      {profileOpen && (
+        <ProfileScreen
+          session={session}
+          onBack={() => setProfileOpen(false)}
+          onLogout={onLogout}
+          onSessionChange={onSessionChange}
+        />
+      )}
+    </div>
+  )
 }
 
 function App() {
@@ -37,10 +55,14 @@ function App() {
     }
   }, [])
 
-  function handleLogout() {
+  const handleLogout = useCallback(() => {
     clearSession()
     setAuthState({ status: 'anonymous' })
-  }
+  }, [])
+
+  const handleSessionChange = useCallback((session: StoredSession) => {
+    setAuthState({ status: 'authenticated', session })
+  }, [])
 
   if (authState.status === 'restoring') {
     return (
@@ -60,7 +82,13 @@ function App() {
     )
   }
 
-  return <AuthenticatedApp session={authState.session} onLogout={handleLogout} />
+  return (
+    <AuthenticatedApp
+      session={authState.session}
+      onLogout={handleLogout}
+      onSessionChange={handleSessionChange}
+    />
+  )
 }
 
 export default App

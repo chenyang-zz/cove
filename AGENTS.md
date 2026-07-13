@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **cove-frontend** (492 symbols, 928 relationships, 41 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **cove-frontend** (592 symbols, 1116 relationships, 48 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -44,6 +44,7 @@ This project is indexed by GitNexus as **cove-frontend** (492 symbols, 928 relat
 
 ## API Documentation and Environment Configuration
 
+- The Figma design source for this project is `[Cove](https://www.figma.com/design/wks3wwXIDCjdsVS6jPQqS6/Cove?node-id=0-1&m=dev&t=5gPGykVr97PD5dac-1)`. Use this file as the design reference for Cove UI work.
 - The OpenAPI contract is located at `/Users/sheepzhao/WorkSpace/agent/boxify/api-go/docs/openapi.json`. Before adding or changing an API call, use it to verify the path, request body, response shape, and authentication requirements.
 - The frontend API base URL is supplied exclusively through `VITE_API_BASE_URL`; it defaults to `http://localhost:8000` when unset.
 - Configure environment-specific values in uncommitted files such as `frontend/.env.development.local` and `frontend/.env.production.local`. Do not hard-code environment URLs in application code.

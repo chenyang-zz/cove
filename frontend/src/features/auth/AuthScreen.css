@@ -111,16 +111,20 @@
 }
 
 .field-group input {
+  appearance: none;
+  -webkit-appearance: none;
   width: 100%;
   min-height: 52px;
   padding: 0 15px;
-  border: 1px solid var(--border-strong);
-  background: var(--input);
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-field);
+  outline: none;
+  background: var(--field-background);
   color: var(--text);
   caret-color: var(--accent);
   font-size: 16px;
   line-height: 1;
-  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+  transition: var(--field-transition);
 }
 
 .field-group input:hover {
@@ -129,13 +133,14 @@
 
 .field-group input:focus {
   border-color: var(--accent);
-  background: var(--surface);
-  box-shadow: 0 0 0 3px var(--focus);
+  background: var(--field-focus-background);
+  box-shadow: var(--field-focus-shadow);
   outline: none;
 }
 
 .field-group input[aria-invalid="true"] {
   border-color: var(--danger);
+  box-shadow: var(--field-error-shadow);
 }
 
 .field-group input:-webkit-autofill,

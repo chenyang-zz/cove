@@ -2,6 +2,7 @@ import {
   ArrowClockwise,
   ArrowUp,
   Books,
+  CaretRight,
   DotsThree,
   GlobeHemisphereWest,
   List,
@@ -64,6 +65,7 @@ const textFilePattern = /\.(?:txt|md|markdown|csv|json|log|ya?ml|xml|html?|css|j
 type ChatScreenProps = {
   session: StoredSession
   onLogout: () => void
+  onOpenProfile?: () => void
 }
 
 type ConversationMenuPosition = {
@@ -340,7 +342,7 @@ function isTextAttachment(file: File) {
   return file.type.startsWith('text/') || file.type === 'application/json' || textFilePattern.test(file.name)
 }
 
-export function ChatScreen({ session, onLogout }: ChatScreenProps) {
+export function ChatScreen({ session, onLogout, onOpenProfile }: ChatScreenProps) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [conversationState, setConversationState] = useState<ResourceState>('loading')
   const [conversationError, setConversationError] = useState('')
@@ -1110,6 +1112,16 @@ export function ChatScreen({ session, onLogout }: ChatScreenProps) {
     }
   }
 
+  function openProfile() {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur()
+    }
+    setDrawerOpen(false)
+    setConversationMenuId(null)
+    setConversationMenuPosition(null)
+    onOpenProfile?.()
+  }
+
   return (
     <main className="chat-app" ref={viewportRootRef}>
       <button
@@ -1206,11 +1218,14 @@ export function ChatScreen({ session, onLogout }: ChatScreenProps) {
         </section>
 
         <div className="drawer-account">
-          <span className="drawer-account__avatar">{displayName.slice(0, 1).toUpperCase()}</span>
-          <span className="drawer-account__identity">
-            <span className="drawer-account__name">{displayName}</span>
-            <span className="drawer-account__username">@{session.user.username}</span>
-          </span>
+          <button className="drawer-account__profile" type="button" aria-label="查看个人信息" onClick={openProfile}>
+            <span className="drawer-account__avatar">{displayName.slice(0, 1).toUpperCase()}</span>
+            <span className="drawer-account__identity">
+              <span className="drawer-account__name">{displayName}</span>
+              <span className="drawer-account__username">@{session.user.username}</span>
+            </span>
+            <CaretRight className="drawer-account__chevron" size={17} weight="bold" />
+          </button>
           <button className="drawer-account__logout" type="button" aria-label="退出登录" onClick={onLogout}>
             <SignOut size={18} />
           </button>

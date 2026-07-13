@@ -67,6 +67,20 @@ Repeat the two `press_key`/`get_app_state` steps for open and close. Verify in e
 
 For drawer or long-content QA, use a fresh screenshot before coordinate clicks or drags. Do not type or submit a real message just to create content. Use existing authenticated data, or ask the user to prepare the required state.
 
+## Replay the authenticated profile path
+
+Use this Cove-specific path when profile or bottom-sheet QA starts from an authenticated chat screen. It was verified from a real iPhone Simulator recording; do not store that recording in the repository because it can contain account information.
+
+1. Capture a fresh device screenshot and tap the hamburger in the chat header's upper-left region.
+2. Wait for the drawer animation to finish and reacquire state. Confirm `Cove`, `新对话`, conversation history, and the fixed account row are visible.
+3. Tap the identity portion of the bottom account row: avatar, nickname, `@username`, or chevron. Avoid the separate red logout control at the far right.
+4. Wait for the drawer to close and verify the profile overlay shows `个人信息`, the back control, and `编辑`.
+5. Tap `编辑` in the upper-right region, or tap the nickname/email row when field-specific focus is required. Verify the `编辑个人信息` bottom sheet before exercising the keyboard.
+
+Measure targets from the latest device screenshot. As coarse portrait-mode search regions, the hamburger is near the upper-left 5%, the drawer identity target is around the left/middle of the bottom 10%, and `编辑` is near the upper-right 8%. These are search hints, not reusable coordinates. Recalculate after any device, window scale, safe-area, appearance, or rotation change.
+
+After each transition, assert the expected screen text before continuing. If Computer Use returns `noWindowsAvailable`, reacquire `com.apple.iphonesimulator` once and retry. If actions still fail while screenshots remain readable, record one user-assisted trace, extract a contact sheet across the full clip, and retain only this normalized workflow plus non-sensitive observations. Do not fall back to AppleScript or private event synthesis.
+
 ## Inspect the whole animation
 
 Check the recording duration, then sample frames across the entire clip rather than only its beginning:

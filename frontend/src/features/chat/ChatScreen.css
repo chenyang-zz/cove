@@ -583,17 +583,18 @@
   width: min(720px, 100%);
   margin: 0 auto;
   padding: 9px 9px 8px 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: 18px;
-  background: var(--surface);
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-field);
+  background: var(--field-background);
   box-shadow: 0 12px 34px rgba(30, 90, 100, 0.11);
   pointer-events: auto;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  transition: var(--field-transition);
 }
 
 .composer:focus-within {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--focus), 0 12px 34px rgba(30, 90, 100, 0.11);
+  background: var(--field-focus-background);
+  box-shadow: var(--field-focus-shadow), 0 12px 34px rgba(30, 90, 100, 0.11);
 }
 
 .composer textarea {
@@ -982,13 +983,31 @@
 .conversation-dialog > p[role="alert"] { color: var(--danger); }
 
 .conversation-dialog input {
+  appearance: none;
+  -webkit-appearance: none;
   width: 100%;
   height: 46px;
   margin-top: 16px;
   padding: 0 12px;
-  border: 1px solid var(--border-strong);
-  background: var(--input);
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-field);
+  outline: none;
+  background: var(--field-background);
   color: var(--text);
+  caret-color: var(--accent);
+  font-size: 16px;
+  transition: var(--field-transition);
+}
+
+.conversation-dialog input:focus {
+  border-color: var(--accent);
+  background: var(--field-focus-background);
+  box-shadow: var(--field-focus-shadow);
+}
+
+.conversation-dialog input[aria-invalid="true"] {
+  border-color: var(--danger);
+  box-shadow: var(--field-error-shadow);
 }
 
 .conversation-dialog__actions {
@@ -1036,6 +1055,25 @@
   border-top: 1px solid var(--border);
 }
 
+.drawer-account__profile {
+  display: flex;
+  min-width: 0;
+  min-height: 49px;
+  padding: 5px;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+
+.drawer-account__profile:hover { background: var(--surface-muted); }
+
 .drawer-account__avatar {
   display: grid;
   width: 32px;
@@ -1065,6 +1103,11 @@
 
 .drawer-account__name { color: var(--text); font-size: 13px; font-weight: 660; }
 .drawer-account__username { color: var(--text-soft); font-size: 11px; }
+
+.drawer-account__chevron {
+  flex: 0 0 auto;
+  color: var(--text-soft);
+}
 
 .drawer-account__logout {
   display: grid;
@@ -1136,7 +1179,7 @@
 @media (prefers-color-scheme: dark) {
   .chat-drawer--open { box-shadow: 18px 0 52px rgba(2, 14, 18, 0.46); }
   .composer { box-shadow: 0 12px 36px rgba(2, 14, 18, 0.28); }
-  .composer:focus-within { box-shadow: 0 0 0 3px var(--focus), 0 12px 36px rgba(2, 14, 18, 0.28); }
+  .composer:focus-within { box-shadow: var(--field-focus-shadow), 0 12px 36px rgba(2, 14, 18, 0.28); }
 }
 
 @media (prefers-reduced-transparency: reduce) {

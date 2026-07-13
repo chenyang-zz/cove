@@ -177,13 +177,16 @@ describe('ChatScreen', () => {
   it('keeps account identity and logout in the drawer while the header action is disabled', async () => {
     const user = userEvent.setup()
     const onLogout = vi.fn()
-    render(<ChatScreen session={session} onLogout={onLogout} />)
+    const onOpenProfile = vi.fn()
+    render(<ChatScreen session={session} onLogout={onLogout} onOpenProfile={onOpenProfile} />)
     await screen.findByRole('heading', { name: '你好，林海' })
 
     expect(screen.getByText('@linhai')).toBeTruthy()
     const placeholder = screen.getByRole('button', { name: '更多功能，暂不可用' })
     expect((placeholder as HTMLButtonElement).disabled).toBe(true)
     expect(screen.queryByRole('menu')).toBeNull()
+    await user.click(screen.getByRole('button', { name: '查看个人信息' }))
+    expect(onOpenProfile).toHaveBeenCalledTimes(1)
     await user.click(screen.getByRole('button', { name: '退出登录' }))
     expect(onLogout).toHaveBeenCalledTimes(1)
   })

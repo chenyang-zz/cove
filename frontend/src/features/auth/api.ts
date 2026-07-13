@@ -259,6 +259,23 @@ export function getCurrentUser(): Promise<UserResponse> {
   return authenticatedRequest<UserResponse>('/api/auth/me')
 }
 
+export function saveCurrentUser(user: UserResponse): StoredSession {
+  const current = loadSession()
+  if (!current) {
+    throw new ApiError(401, '请先登录。')
+  }
+  return saveSession({
+    ...current,
+    user: {
+      id: user.id,
+      username: user.username,
+      nickname: user.nickname,
+      email: user.email,
+      avatar: user.avatar,
+    },
+  })
+}
+
 export function restoreSession(): Promise<StoredSession | null> {
   if (restoreInFlight) {
     return restoreInFlight

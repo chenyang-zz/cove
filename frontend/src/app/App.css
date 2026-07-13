@@ -6,6 +6,15 @@
   background: var(--page);
 }
 
+.authenticated-app,
+.authenticated-app__chat {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
 .launch-screen img {
   width: 72px;
   height: 72px;
