@@ -1,0 +1,55 @@
+internal/domain/tools/builtin/knowledge.go
+  s_490e6dbe8d13f6::t_4b791daa951338 148-149
+internal/domain/tools/builtin/knowledge_test.go
+  s_490e6dbe8d13f6::t_d9d7478815615d 504,507,522,532,534
+internal/logic/document/document_test.go
+  s_490e6dbe8d13f6::t_8930824f22ca06 394,398,400,405,876,917-918
+internal/logic/document/helper.go
+  s_490e6dbe8d13f6::t_84297929320db3 157
+internal/logic/document/search_documents.go
+  s_490e6dbe8d13f6::t_d2c55de61c3788 59-60
+internal/logic/image/helper.go
+  s_490e6dbe8d13f6::t_5812f486377c81 130
+internal/logic/image/image_test.go
+  s_490e6dbe8d13f6::t_31de25eb632d9a 277,279,283,285,290,707
+internal/logic/image/search_images.go
+  s_490e6dbe8d13f6::t_15552e18109a65 65-66
+internal/logic/tag/helper.go
+  s_490e6dbe8d13f6::t_eb41a815136301 71-72,103-104,108,114
+internal/logic/tag/tag_test.go
+  s_490e6dbe8d13f6::t_3a93f8be5ba4c2 193,197,201,204
+internal/models/rag_chunk.go
+  s_490e6dbe8d13f6::t_75d88168a2dd50 8,10,14-16,19,22
+internal/repository/es/rag_chunk.go
+  s_490e6dbe8d13f6::t_a1de805995c148 19-21,56,60-61,85,87,90-91,94,97,103-104,110,118-119,131,139-140,152,166,168,180,182,187-188,196,201,210,212,215,230,233,236,273,276,292
+internal/repository/es/rag_chunk_test.go
+  s_490e6dbe8d13f6::t_b35c44ac5e45c9 45-46,50-58,82,86,92,124,127-129,142-143,145,164-165,169-170,175,177,197,202-203,211,213,232,237-238,248,256,258,265,270,275-276,282,300,303,306-307
+internal/repository/rag_chunk.go
+  s_490e6dbe8d13f6::t_9a8ebb15ee4cc8 15-17
+internal/transport/http/router_test.go
+  s_490e6dbe8d13f6::t_393698557e5073 1238,1242,1246,1249
+internal/worker/tasks/parse_document.go
+  s_490e6dbe8d13f6::t_72cc2b3b6c7c60 149
+internal/worker/tasks/parse_document_test.go
+  s_490e6dbe8d13f6::t_fbc2a2d88df31d 441-442
+internal/worker/tasks/parse_image.go
+  s_490e6dbe8d13f6::t_efc930d873ce3b 232
+internal/worker/tasks/parse_image_test.go
+  s_490e6dbe8d13f6::t_12cf8fafc823e9 246
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "9b7cd5582d4f9e9f81a5308cb9bbbf5c089d680f",
+  "prompts": {},
+  "sessions": {
+    "s_490e6dbe8d13f6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_490e6dbe8d13f6",
+        "model": "unknown"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
