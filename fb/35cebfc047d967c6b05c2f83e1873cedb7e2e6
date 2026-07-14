@@ -1,0 +1,59 @@
+internal/core/agent/prompt/prompt_test.go
+  s_57fa4165e5548d::t_01fea786fb1f43 4,14-15,25,36,38,43,49-53
+internal/core/agent/prompt/types.go
+  s_57fa4165e5548d::t_243480d49f23a1 26,28
+internal/core/agent/react/planner.go
+  s_57fa4165e5548d::t_d646a940a2cd7d 392,394-398
+internal/core/agent/react/prompt.go
+  s_57fa4165e5548d::t_88ff1d8b9c22ac 53-70
+internal/core/agent/react/react_test.go
+  s_57fa4165e5548d::t_ac36f177307e85 99,117,119-120,123-127,358-377
+internal/domain/flow/chat/orchestrator.go
+  s_57fa4165e5548d::t_beace1fa646f18 131,134,428-429,434,441-442,444,447,452-454,459-470
+internal/domain/flow/chat/orchestrator_test.go
+  s_57fa4165e5548d::t_d03025fb319a49 51,53,55,61-64,119-120,123,134,137,140-141,143-144,519,521,527,529-533,565,568,570
+internal/infrastructure/realtime/codec/codec.go
+  s_57fa4165e5548d::t_8a58326c2e74ef 37-41,60-64,119-124
+internal/infrastructure/realtime/codec/codec_test.go
+  s_57fa4165e5548d::t_ad574117c39a51 4,21-22,62-85
+internal/logic/agentpersona/create_agent_persona.go
+  s_57fa4165e5548d::t_4eeb49e702b8f7 45-50
+internal/logic/agentpersona/update_agent_persona.go
+  s_57fa4165e5548d::t_1ccdae28fb1998 58-64
+internal/logic/chat/chat_stream.go
+  s_57fa4165e5548d::t_375ee3073d5d4c 148-159,294-301,303-304,312,315-320,322
+internal/logic/chat/chat_stream_test.go
+  s_57fa4165e5548d::t_05b67b96e51505 184,187,190,193,198,200-201,203,206-230,255,266-297
+internal/logic/chat/persona_prompt.go
+  s_57fa4165e5548d::t_ec751af6de1a33 1-77
+internal/logic/chat/persona_prompt_test.go
+  s_57fa4165e5548d::t_508142a6804ab3 1-66
+internal/mapper/agent.go
+  s_57fa4165e5548d::t_c9e0688e719ffc 30-37
+internal/models/agent_persona.go
+  s_57fa4165e5548d::t_97649d32251b0c 15-17,20-22,24-29,36-48
+internal/repository/agent_persona.go
+  s_57fa4165e5548d::t_eab2f6f92d5457 15-16,43-48
+internal/repository/postgres/agent_persona.go
+  s_57fa4165e5548d::t_f9ff419bc3a480 59-73
+internal/transport/http/request/agent.go
+  s_57fa4165e5548d::t_e8c622026bd478 30-34,43-47
+internal/transport/http/response/agent.go
+  s_57fa4165e5548d::t_0092f4b430705a 29-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "fb35cebfc047d967c6b05c2f83e1873cedb7e2e6",
+  "prompts": {},
+  "sessions": {
+    "s_57fa4165e5548d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_57fa4165e5548d",
+        "model": "unknown"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
