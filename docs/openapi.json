@@ -44,13 +44,16 @@
           "id": {
             "type": "string"
           },
+          "identity": {
+            "type": "string"
+          },
           "is_active": {
             "type": "boolean"
           },
           "name": {
             "type": "string"
           },
-          "system_prompt": {
+          "soul": {
             "type": "string"
           },
           "temperature": {
@@ -940,12 +943,16 @@
                     "maxLength": 512,
                     "type": "string"
                   },
+                  "identity": {
+                    "maxLength": 4000,
+                    "type": "string"
+                  },
                   "name": {
                     "maxLength": 64,
                     "minLength": 1,
                     "type": "string"
                   },
-                  "system_prompt": {
+                  "soul": {
                     "maxLength": 4000,
                     "type": "string"
                   },
@@ -1128,12 +1135,16 @@
                     "maxLength": 512,
                     "type": "string"
                   },
+                  "identity": {
+                    "maxLength": 4000,
+                    "type": "string"
+                  },
                   "name": {
                     "maxLength": 64,
                     "minLength": 1,
                     "type": "string"
                   },
-                  "system_prompt": {
+                  "soul": {
                     "maxLength": 4000,
                     "type": "string"
                   },
