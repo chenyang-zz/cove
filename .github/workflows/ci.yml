@@ -31,7 +31,8 @@ jobs:
             echo "dirs=" >> "$GITHUB_OUTPUT"
             echo "无 .go 文件变更，增量检查将跳过"
           else
-            changed_dirs=$(echo "$changed_files" | xargs -I{} dirname {} | sort -u | tr '\n' ' ')
+            # Go 要求相对 import path 以 ./ 开头，否则会误当成 stdlib 包路径
+            changed_dirs=$(echo "$changed_files" | xargs -I{} dirname {} | sort -u | sed 's|^\./||; s|^|./|' | tr '\n' ' ')
             echo "dirs=${changed_dirs}" >> "$GITHUB_OUTPUT"
             echo "变更包: ${changed_dirs}"
           fi

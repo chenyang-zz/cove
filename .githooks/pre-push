@@ -43,7 +43,8 @@ if [ "$FULL_VERIFY" = true ]; then
   if [ -n "$merge_base" ]; then
     changed_dirs=$(git diff --name-only "${merge_base}..HEAD" -- '*.go' \
       | xargs -I{} dirname {} \
-      | sort -u)
+      | sort -u \
+      | sed 's|^\./||; s|^|./|')
   fi
 
   if [ -n "$changed_dirs" ]; then
