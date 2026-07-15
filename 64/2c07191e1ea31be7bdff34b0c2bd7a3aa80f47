@@ -1,0 +1,120 @@
+internal/mapper/agent.go
+  s_a5f282227fb606::t_c0cf334b5dfe79 18
+  s_a5f282227fb606::t_f7c9a250acf47e 28
+  s_a5f282227fb606::t_18cee201500230 17
+internal/transport/http/routes/agentconfig.go
+  s_a5f282227fb606::t_7d3c3f1e4b193e 40-43
+  s_a5f282227fb606::t_9a9b1ba38b0489 17-27,29,35-39
+  s_a5f282227fb606::t_7581e4c20a57f5 34
+internal/models/agent_config.go
+  s_a5f282227fb606::t_f7c9a250acf47e 29
+  s_a5f282227fb606::t_f9a0c4cd417129 17
+  s_a5f282227fb606::t_3ecce6a24e410e 19
+internal/logic/agentconfig/agent_config_test.go
+  s_a5f282227fb606::t_f0aa6fbd2d6e7c 139-147,149,151-152,183,200-205,208-214,217,221-225,258-259,263-268,271,274-279
+  s_a5f282227fb606::t_37a962dd5c7275 5-6,27,39,43,49,91,95,97,110-116,171-182,247-249,282-299
+  s_a5f282227fb606::t_848fb3da9c58eb 13,17-18,20-26,28-38,40-42,44-48,50-52,54-57,59-73,75-81,85-86,88-89,93,98-102,104-109,117-138,157,162,165-170,184-185,188-196,199,218-220,226-237,240-246,250-252,254-257,260-262,300
+  s_a5f282227fb606::t_669a9831c4fd38 94,103
+internal/logic/agentconfig/update_agent_config.go
+  s_a5f282227fb606::t_c3f1cf8fc38ca8 38,40-44,48,52-53,56
+  s_a5f282227fb606::t_d3fd355e6c35ef 35-37
+  s_a5f282227fb606::t_c0cf334b5dfe79 49-50
+internal/mapper/agent_test.go
+  s_a5f282227fb606::t_d3fd355e6c35ef 8,12-13,17-18
+  s_a5f282227fb606::t_37a962dd5c7275 11,14-16
+  s_a5f282227fb606::t_de96f2dc9659a6 19
+internal/logic/agentconfig/set_default_agent_config.go
+  s_a5f282227fb606::t_18467ec16ecbf9 34-35,37
+  s_a5f282227fb606::t_34da4ee90bf449 1-33,36,38-42
+internal/logic/agentconfig/create_agent_config.go
+  s_a5f282227fb606::t_34da4ee90bf449 12,42
+  s_a5f282227fb606::t_18467ec16ecbf9 40-41,43
+  s_a5f282227fb606::t_c0cf334b5dfe79 33-35
+  s_a5f282227fb606::t_c3f1cf8fc38ca8 1-11,13-32,36-39,44-48
+internal/logic/agentconfig/delete_agent_config.go
+  s_a5f282227fb606::t_c3f1cf8fc38ca8 1-9,11-31,36
+  s_a5f282227fb606::t_18467ec16ecbf9 32-33,35
+  s_a5f282227fb606::t_34da4ee90bf449 10,34
+CLAUDE.md
+  s_a5f282227fb606::t_0e7e9b61d5de75 4
+internal/logic/agentconfig/fields.go
+  s_a5f282227fb606::t_c0cf334b5dfe79 4-5,37-40,118-120
+  s_a5f282227fb606::t_c3f1cf8fc38ca8 1-3,6-36,41-117,121-136
+internal/repository/agent_config.go
+  s_a5f282227fb606::t_c0cf334b5dfe79 31-34
+  s_a5f282227fb606::t_18467ec16ecbf9 12,14
+internal/transport/http/handler/agentconfig.go
+  s_a5f282227fb606::t_7d3c3f1e4b193e 112,114-132
+  s_a5f282227fb606::t_9a9b1ba38b0489 21-53,55-59,65,75-78,96-111
+  s_a5f282227fb606::t_7404945fa1bf47 113
+docs/openapi.json
+  s_a5f282227fb606::t_cd77fcbb9a2e47 51,1082,1163-1219,1221-1244
+  s_a5f282227fb606::t_b0a5ec51c80c6c 33-35,45,48-50,620-621,632-640,696-698,731-733,750,926-1081,1083-1140,1146-1162,1220,1245-1311,2044-2046
+  s_a5f282227fb606::t_c53e3eb2a9f0b9 54-56,746-749,1141-1145
+internal/transport/http/router_test.go
+  s_a5f282227fb606::t_f7c9a250acf47e 2384
+  s_a5f282227fb606::t_441c2af9fc9ef7 2350-2377,2379-2383,2385-2389,2392-2420,2422,2424-2427,2429-2432,2434,2466-2491
+  s_a5f282227fb606::t_413a617cf1590a 1379,1402-1422,1448-1449,1453-1469
+  s_a5f282227fb606::t_7b931058b7cb30 9
+  s_a5f282227fb606::t_af315d6ce2c62c 2423,2433,2436
+  s_a5f282227fb606::t_d3fd355e6c35ef 1354-1366,1380-1401,1423-1436,1440-1447,1450-1452,1470,1490-1491
+  s_a5f282227fb606::t_e5bf408fb49bec 2349,2391,2437-2445,2447-2452,2454,2459-2465
+  s_a5f282227fb606::t_e37eb3b5312232 1367-1378,1437-1439,1471-1489,2378,2390,2421,2428,2435,2446,2453,2455-2458
+internal/logic/agentconfig/get_agent_config.go
+  s_a5f282227fb606::t_c3f1cf8fc38ca8 10,31-34,37
+internal/logic/chat/chat_stream_test.go
+  s_a5f282227fb606::t_cb9c041f18549e 224-226,230-231,599-601,616-625,628-629,632
+  s_a5f282227fb606::t_1a8a7f11f47578 227-229,232-253,613-614
+  s_a5f282227fb606::t_36be4cc00161e9 615
+internal/repository/postgres/agent_config.go
+  s_a5f282227fb606::t_d4c5f1a478aaad 6-7,33-40,50-52,167,174-176,190-194,202-204,255-262,264-286
+  s_a5f282227fb606::t_835621068f0121 8
+  s_a5f282227fb606::t_f0aa6fbd2d6e7c 171
+  s_a5f282227fb606::t_06f6fce9f31229 116-117,195
+  s_a5f282227fb606::t_e7a79f53af0850 14,26-32,41-49,53-58,77-115,132-159,161,163,214-254,287-298
+internal/transport/http/request/agent.go
+  s_a5f282227fb606::t_c0cf334b5dfe79 10
+  s_a5f282227fb606::t_18cee201500230 9,17,30-41
+  s_a5f282227fb606::t_28cad851e528cf 42
+internal/logic/agentconfig/list_agent_configs.go
+  s_a5f282227fb606::t_c3f1cf8fc38ca8 1-39
+AGENTS.md
+  s_a5f282227fb606::t_0e7e9b61d5de75 4
+internal/logic/chat/chat_stream.go
+  s_a5f282227fb606::t_af315d6ce2c62c 290
+  s_a5f282227fb606::t_7d3c3f1e4b193e 283,287-288,291-293
+  s_a5f282227fb606::t_18467ec16ecbf9 286,289
+  s_a5f282227fb606::t_078fe65c84453d 144,284-285,294,296,298,300,302
+internal/models/user_test.go
+  s_a5f282227fb606::t_8cadfd9f956c20 7,11,107-123
+  s_a5f282227fb606::t_37a962dd5c7275 90
+  s_a5f282227fb606::t_cb9c041f18549e 91-93,96-106,124-126
+  s_a5f282227fb606::t_3ecce6a24e410e 94-95
+internal/transport/http/response/agent.go
+  s_a5f282227fb606::t_18cee201500230 17
+  s_a5f282227fb606::t_f7c9a250acf47e 28
+  s_a5f282227fb606::t_c0cf334b5dfe79 18
+  s_a5f282227fb606::t_0bde5b3c2aa30c 19-27,29-36
+internal/repository/postgres/agent_config_test.go
+  s_a5f282227fb606::t_d78ccf14388ae0 47-52,82-92
+  s_a5f282227fb606::t_71bc0df0540cfa 111-179
+  s_a5f282227fb606::t_d3fd355e6c35ef 1-46,53-81,93-110
+internal/transport/http/request/chat.go
+  s_a5f282227fb606::t_18cee201500230 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "642c07191e1ea31be7bdff34b0c2bd7a3aa80f47",
+  "prompts": {},
+  "sessions": {
+    "s_a5f282227fb606": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f13c4-cb77-7061-8d78-bfdb2b2034a3",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
