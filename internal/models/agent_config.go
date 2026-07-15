@@ -14,8 +14,9 @@ import (
 
 type AgentConfig struct {
 	ID                         uuid.UUID `gorm:"column:id;type:uuid;primaryKey"`
-	UserID                     uuid.UUID `gorm:"column:user_id;type:uuid;not null;index"`
+	UserID                     uuid.UUID `gorm:"column:user_id;type:uuid;not null;uniqueIndex:idx_agent_configs_user_default,where:is_default = true;index:uq_agent_configs_user_name,unique"`
 	User                       User      `gorm:"foreignKey:UserID;references:ID;constraint:OnDelete:CASCADE"`
+	Name                       string    `gorm:"column:name;size:100;not null;default:'默认配置';index:uq_agent_configs_user_name,unique"`
 	SystemPrompt               string    `gorm:"column:system_prompt;type:text"` // 自定义系统提示词（人设/风格），问答时作为 system message 注入
 	Temperature                float64   `gorm:"column:temperature;not null;default:0.7"`
 	EnableKnowledge            bool      `gorm:"column:enable_knowledge;not null;default:true"` // 工具默认开关（联网搜索默认关，知识库/记忆默认开）
@@ -25,6 +26,7 @@ type AgentConfig struct {
 	EnableCrossSession         bool      `gorm:"column:enable_cross_session;not null;default:false"` // 跨会话上下文：注入最近其他会话的摘要，让跨会话也能接着聊（默认关）
 	ShowAvatar                 bool      `gorm:"column:show_avatar;not null;default:false"`          // 对话界面是否显示头像（开 → AI 人格头像 + 用户头像；关 → 两边都不显示）
 	HumanMode                  bool      `gorm:"column:human_mode;not null;default:false"`           // 真人对话模式（全局）：开启后单聊/群聊都像真人微信聊天（口语短句、可多气泡），关闭恢复助手风格
+	IsDefault                  bool      `gorm:"column:is_default;not null;default:false;uniqueIndex:idx_agent_configs_user_default,where:is_default = true"`
 	ContextEnabled             bool      `gorm:"column:context_enabled;not null;default:true"`
 	ContextWindowTokens        int       `gorm:"column:context_window_tokens;not null;default:32768"`
 	ContextOutputReserveTokens int       `gorm:"column:context_output_reserve_tokens;not null;default:4096"`

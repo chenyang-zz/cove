@@ -221,6 +221,36 @@ func TestResolveChatRuntimeConfigUsesDatabaseContextPolicy(t *testing.T) {
 	}
 }
 
+// TestChatAgentConfigUsesDefaultWithoutExplicitID 验证未传配置 ID 时读取当前用户的默认配置。
+func TestChatAgentConfigUsesDefaultWithoutExplicitID(t *testing.T) {
+	repo := &fakeChatAgentConfigRepo{row: &models.AgentConfig{ID: uuid.New(), UserID: uuid.New(), IsDefault: true}}
+	logic := &ChatStreamLogic{svcCtx: &svc.ServiceContext{AgentConfigRepo: repo}}
+
+	config, err := logic.chatAgentConfig(context.Background(), repo.row.UserID, "")
+	if err != nil || config != repo.row || repo.findDefaultCalls != 1 || repo.findByIDCalls != 0 {
+		t.Fatalf("chatAgentConfig(empty) config=%#v error=%v defaultCalls=%d idCalls=%d, want default row nil 1 0", config, err, repo.findDefaultCalls, repo.findByIDCalls)
+	}
+}
+
+// TestChatAgentConfigLoadsExplicitOwnedID 验证显式配置 ID 按当前用户加载，并拒绝非法 ID 和其他用户访问。
+func TestChatAgentConfigLoadsExplicitOwnedID(t *testing.T) {
+	userID := uuid.New()
+	row := &models.AgentConfig{ID: uuid.New(), UserID: userID, Temperature: 0.2}
+	repo := &fakeChatAgentConfigRepo{row: row}
+	logic := &ChatStreamLogic{svcCtx: &svc.ServiceContext{AgentConfigRepo: repo}}
+
+	config, err := logic.chatAgentConfig(context.Background(), userID, row.ID.String())
+	if err != nil || config != row || repo.findByIDCalls != 1 {
+		t.Fatalf("chatAgentConfig(owner) config=%#v error=%v calls=%d, want row nil 1", config, err, repo.findByIDCalls)
+	}
+	if _, err := logic.chatAgentConfig(context.Background(), userID, "invalid"); xerr.From(err).Kind != xerr.KindBadRequest {
+		t.Fatalf("chatAgentConfig(invalid ID) error=%v, want bad request", err)
+	}
+	if _, err := logic.chatAgentConfig(context.Background(), uuid.New(), row.ID.String()); xerr.From(err).Kind != xerr.KindNotFound {
+		t.Fatalf("chatAgentConfig(other user) error=%v, want not found", err)
+	}
+}
+
 // 验证有生效人格时 SystemPrompt 含 Soul/Identity（先 Soul），且不注入 Cove intro。
 func TestResolveChatRuntimeConfigUsesActivePersona(t *testing.T) {
 	persona := &models.AgentPersona{
@@ -566,7 +596,9 @@ func (r *fakeChatModelConfigRepo) FindByID(ctx context.Context, userID uuid.UUID
 }
 
 type fakeChatAgentConfigRepo struct {
-	row *models.AgentConfig
+	row              *models.AgentConfig
+	findDefaultCalls int
+	findByIDCalls    int
 }
 
 func (r *fakeChatAgentConfigRepo) Create(ctx context.Context, userID uuid.UUID, row *models.AgentConfig) (*models.AgentConfig, error) {
@@ -578,13 +610,26 @@ func (r *fakeChatAgentConfigRepo) List(ctx context.Context, userID uuid.UUID) ([
 }
 
 func (r *fakeChatAgentConfigRepo) FindByID(ctx context.Context, userID uuid.UUID, agentConfigID uuid.UUID) (*models.AgentConfig, error) {
-	return nil, xerr.NotFound("智能体配置不存在")
-}
-
-func (r *fakeChatAgentConfigRepo) FindByUserID(ctx context.Context, userID uuid.UUID) (*models.AgentConfig, error) {
-	if r.row == nil {
+	r.findByIDCalls++
+	if r.row == nil || r.row.ID != agentConfigID || r.row.UserID != userID {
 		return nil, xerr.NotFound("智能体配置不存在")
 	}
+	return r.row, nil
+}
+
+func (r *fakeChatAgentConfigRepo) FindDefault(ctx context.Context, userID uuid.UUID) (*models.AgentConfig, error) {
+	r.findDefaultCalls++
+	if r.row == nil || r.row.UserID != userID || !r.row.IsDefault {
+		return nil, xerr.NotFound("默认智能体配置不存在")
+	}
+	return r.row, nil
+}
+
+func (r *fakeChatAgentConfigRepo) SetDefault(ctx context.Context, userID uuid.UUID, agentConfigID uuid.UUID) (*models.AgentConfig, error) {
+	if r.row == nil || r.row.UserID != userID || r.row.ID != agentConfigID {
+		return nil, xerr.NotFound("智能体配置不存在")
+	}
+	r.row.IsDefault = true
 	return r.row, nil
 }
 

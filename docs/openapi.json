@@ -30,6 +30,9 @@
           "enable_active_recall": {
             "type": "boolean"
           },
+          "enable_cross_session": {
+            "type": "boolean"
+          },
           "enable_knowledge": {
             "type": "boolean"
           },
@@ -39,11 +42,17 @@
           "enable_web_search": {
             "type": "boolean"
           },
-          "enalbe_cross_session": {
-            "type": "boolean"
-          },
           "human_mode": {
             "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "is_default": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
           },
           "show_avatar": {
             "type": "boolean"
@@ -608,8 +617,8 @@
   "paths": {
     "/api/agent-config": {
       "get": {
-        "description": "查询智能体配置",
-        "operationId": "agentconfigGetAgentConfig",
+        "description": "查询智能体配置列表",
+        "operationId": "agentconfigListAgentConfigs",
         "responses": {
           "200": {
             "content": {
@@ -620,7 +629,15 @@
                       "type": "integer"
                     },
                     "data": {
-                      "$ref": "#/components/schemas/AgentConfigResponse"
+                      "properties": {
+                        "list": {
+                          "items": {
+                            "$ref": "#/components/schemas/AgentConfigResponse"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
                     },
                     "message": {
                       "type": "string"
@@ -676,9 +693,9 @@
           "agentconfig"
         ]
       },
-      "put": {
-        "description": "更新智能体配置",
-        "operationId": "agentconfigUpdateAgentConfig",
+      "post": {
+        "description": "创建智能体配置",
+        "operationId": "agentconfigCreateAgentConfig",
         "requestBody": {
           "content": {
             "application/json": {
@@ -711,6 +728,9 @@
                   "enable_active_recall": {
                     "type": "boolean"
                   },
+                  "enable_cross_session": {
+                    "type": "boolean"
+                  },
                   "enable_knowledge": {
                     "type": "boolean"
                   },
@@ -720,11 +740,13 @@
                   "enable_web_search": {
                     "type": "boolean"
                   },
-                  "enalbe_cross_session": {
-                    "type": "boolean"
-                  },
                   "human_mode": {
                     "type": "boolean"
+                  },
+                  "name": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "type": "string"
                   },
                   "show_avatar": {
                     "type": "boolean"
@@ -845,6 +867,392 @@
                     },
                     "data": {
                       "$ref": "#/components/schemas/OptimizePromptResponse"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "请求参数错误"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "未认证"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "服务器内部错误"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "agentconfig"
+        ]
+      }
+    },
+    "/api/agent-config/{agent_config_id}": {
+      "delete": {
+        "description": "删除智能体配置",
+        "operationId": "agentconfigDeleteAgentConfig",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_config_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "请求参数错误"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "未认证"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "服务器内部错误"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "agentconfig"
+        ]
+      },
+      "get": {
+        "description": "查询智能体配置详情",
+        "operationId": "agentconfigGetAgentConfig",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_config_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AgentConfigResponse"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "请求参数错误"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "未认证"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "服务器内部错误"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "agentconfig"
+        ]
+      },
+      "patch": {
+        "description": "更新智能体配置",
+        "operationId": "agentconfigUpdateAgentConfig",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_config_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "context_enabled": {
+                    "type": "boolean"
+                  },
+                  "context_keep_recent_tokens": {
+                    "type": "integer"
+                  },
+                  "context_output_reserve_tokens": {
+                    "type": "integer"
+                  },
+                  "context_safety_margin_tokens": {
+                    "type": "integer"
+                  },
+                  "context_summary_max_tokens": {
+                    "type": "integer"
+                  },
+                  "context_target_ratio": {
+                    "type": "number"
+                  },
+                  "context_trigger_ratio": {
+                    "type": "number"
+                  },
+                  "context_window_tokens": {
+                    "type": "integer"
+                  },
+                  "enable_active_recall": {
+                    "type": "boolean"
+                  },
+                  "enable_cross_session": {
+                    "type": "boolean"
+                  },
+                  "enable_knowledge": {
+                    "type": "boolean"
+                  },
+                  "enable_memory": {
+                    "type": "boolean"
+                  },
+                  "enable_web_search": {
+                    "type": "boolean"
+                  },
+                  "human_mode": {
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "show_avatar": {
+                    "type": "boolean"
+                  },
+                  "system_prompt": {
+                    "maxLength": 4000,
+                    "type": "string"
+                  },
+                  "temperature": {
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AgentConfigResponse"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "请求参数错误"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "未认证"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "服务器内部错误"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "agentconfig"
+        ]
+      }
+    },
+    "/api/agent-config/{agent_config_id}/default": {
+      "post": {
+        "description": "设置默认智能体配置",
+        "operationId": "agentconfigSetDefaultAgentConfig",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_config_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AgentConfigResponse"
                     },
                     "message": {
                       "type": "string"
@@ -1633,6 +2041,9 @@
             "application/json": {
               "schema": {
                 "properties": {
+                  "agent_config_id": {
+                    "type": "string"
+                  },
                   "attachments": {
                     "items": {
                       "type": "object"

@@ -5,11 +5,10 @@ import (
 	"log/slog"
 
 	"github.com/boxify/api-go/internal/mapper"
-	"github.com/boxify/api-go/internal/models"
 	"github.com/boxify/api-go/internal/observability/xlog"
 	"github.com/boxify/api-go/internal/svc"
+	"github.com/boxify/api-go/internal/transport/http/request"
 	"github.com/boxify/api-go/internal/transport/http/response"
-	"github.com/boxify/api-go/internal/xerr"
 	"github.com/google/uuid"
 )
 
@@ -29,18 +28,13 @@ func NewGetAgentConfigLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Ge
 	}
 }
 
-// GetAgentConfig 查询智能体配置
-func (l *GetAgentConfigLogic) GetAgentConfig(userID uuid.UUID) (*response.AgentConfigResponse, error) {
-	config, err := l.svcCtx.AgentConfigRepo.FindByUserID(l.ctx, userID)
-	if err == nil {
-		return mapper.AgentConfigToResponse(config), nil
-	}
-
-	if xerr.From(err).Kind != xerr.KindNotFound {
+// GetAgentConfig 按 ID 查询当前用户拥有的智能体配置。
+func (l *GetAgentConfigLogic) GetAgentConfig(userID uuid.UUID, input *request.UriAgentConfigIDRequest) (*response.AgentConfigResponse, error) {
+	id, err := agentConfigID(input)
+	if err != nil {
 		return nil, err
 	}
-
-	config, err = l.svcCtx.AgentConfigRepo.Create(l.ctx, userID, &models.AgentConfig{})
+	config, err := l.svcCtx.AgentConfigRepo.FindByID(l.ctx, userID, id)
 	if err != nil {
 		return nil, err
 	}

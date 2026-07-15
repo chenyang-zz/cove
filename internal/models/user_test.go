@@ -4,9 +4,11 @@ import (
 	"database/sql/driver"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm/schema"
 )
 
 func TestUserTableName(t *testing.T) {
@@ -82,6 +84,43 @@ func TestModelConfigGormTags(t *testing.T) {
 				t.Fatalf("%s gorm tag = %q, want to contain %q", fieldName, tag, want)
 			}
 		}
+	}
+}
+
+// TestAgentConfigDefaultGormTags 验证 Agent 配置名称和默认标记都具有用户级唯一约束。
+func TestAgentConfigDefaultGormTags(t *testing.T) {
+	modelType := reflect.TypeFor[AgentConfig]()
+	for fieldName, wantParts := range map[string][]string{
+		"UserID":    {"uniqueIndex:idx_agent_configs_user_default", "where:is_default = true", "index:uq_agent_configs_user_name,unique"},
+		"Name":      {"column:name", "size:100", "not null", "default:'默认配置'", "index:uq_agent_configs_user_name,unique"},
+		"IsDefault": {"column:is_default", "default:false", "uniqueIndex:idx_agent_configs_user_default", "where:is_default = true"},
+	} {
+		field, ok := modelType.FieldByName(fieldName)
+		if !ok {
+			t.Fatalf("AgentConfig missing field %s", fieldName)
+		}
+		for _, want := range wantParts {
+			if tag := field.Tag.Get("gorm"); !strings.Contains(tag, want) {
+				t.Fatalf("AgentConfig.%s gorm tag = %q, want to contain %q", fieldName, tag, want)
+			}
+		}
+	}
+
+	parsed, err := schema.Parse(&AgentConfig{}, &sync.Map{}, schema.NamingStrategy{})
+	if err != nil {
+		t.Fatalf("schema.Parse(AgentConfig) error = %v, want nil", err)
+	}
+	indexes := make(map[string]*schema.Index)
+	for _, index := range parsed.ParseIndexes() {
+		indexes[index.Name] = index
+	}
+	nameIndex := indexes["uq_agent_configs_user_name"]
+	if nameIndex == nil || nameIndex.Class != "UNIQUE" || len(nameIndex.Fields) != 2 || nameIndex.Fields[0].Field.Name != "UserID" || nameIndex.Fields[1].Field.Name != "Name" {
+		t.Fatalf("parsed name index = %#v, want UNIQUE(UserID, Name)", nameIndex)
+	}
+	defaultIndex := indexes["idx_agent_configs_user_default"]
+	if defaultIndex == nil || defaultIndex.Class != "UNIQUE" || defaultIndex.Where != "is_default = true" {
+		t.Fatalf("parsed default index = %#v, want partial unique default index", defaultIndex)
 	}
 }
 

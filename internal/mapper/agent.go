@@ -14,6 +14,8 @@ import (
 
 func AgentConfigToResponse(row *models.AgentConfig) *response.AgentConfigResponse {
 	return &response.AgentConfigResponse{
+		ID:                         row.ID,
+		Name:                       row.Name,
 		SystemPrompt:               row.SystemPrompt,
 		Temperature:                row.Temperature,
 		EnableKnowledge:            row.EnableKnowledge,
@@ -23,6 +25,7 @@ func AgentConfigToResponse(row *models.AgentConfig) *response.AgentConfigRespons
 		EnableCrossSession:         row.EnableCrossSession,
 		ShowAvatar:                 row.ShowAvatar,
 		HumanMode:                  row.HumanMode,
+		IsDefault:                  row.IsDefault,
 		ContextEnabled:             row.ContextEnabled,
 		ContextWindowTokens:        row.ContextWindowTokens,
 		ContextOutputReserveTokens: row.ContextOutputReserveTokens,

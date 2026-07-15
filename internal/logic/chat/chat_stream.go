@@ -141,7 +141,7 @@ func (l *ChatStreamLogic) runChatTurnBG(
 		_ = l.svcCtx.Realtime.Publish(ctx, topic, types.NewErrorEvent("会话不存在"))
 		return
 	}
-	agentConfig, err := l.chatAgentConfig(ctx, userID)
+	agentConfig, err := l.chatAgentConfig(ctx, userID, input.AgentConfigID)
 	if err != nil {
 		l.log.WarnContext(ctx, "获取聊天 Agent 配置失败", slog.String("error", err.Error()))
 		_ = l.svcCtx.Realtime.Publish(ctx, topic, types.NewErrorEvent("生成失败："+err.Error()))
@@ -280,19 +280,26 @@ type chatRuntimeConfig struct {
 	ContextPolicy   *corecontext.Policy
 }
 
-// chatAgentConfig 获取Agent配置
-func (l *ChatStreamLogic) chatAgentConfig(ctx context.Context, userID uuid.UUID) (*models.AgentConfig, error) {
-	if l.svcCtx == nil || l.svcCtx.AgentConfigRepo == nil {
-		return nil, nil
-	}
-	config, err := l.svcCtx.AgentConfigRepo.FindByUserID(ctx, userID)
-	if err != nil {
-		if xerr.From(err).Kind == xerr.KindNotFound {
+// chatAgentConfig 优先读取显式指定的配置；未传 ID 时使用当前用户的默认配置。
+func (l *ChatStreamLogic) chatAgentConfig(ctx context.Context, userID uuid.UUID, rawConfigID string) (*models.AgentConfig, error) {
+	if strings.TrimSpace(rawConfigID) == "" {
+		if l.svcCtx == nil || l.svcCtx.AgentConfigRepo == nil {
 			return nil, nil
 		}
-		return nil, err
+		config, err := l.svcCtx.AgentConfigRepo.FindDefault(ctx, userID)
+		if err != nil && xerr.From(err).Kind == xerr.KindNotFound {
+			return nil, nil
+		}
+		return config, err
 	}
-	return config, nil
+	if l.svcCtx == nil || l.svcCtx.AgentConfigRepo == nil {
+		return nil, xerr.Internal("智能体配置仓储未初始化", nil)
+	}
+	configID, err := uuid.Parse(rawConfigID)
+	if err != nil {
+		return nil, xerr.BadRequest("智能体配置 ID 无效")
+	}
+	return l.svcCtx.AgentConfigRepo.FindByID(ctx, userID, configID)
 }
 
 // chatActivePersona 获取用户当前生效的 AgentPersona；无生效角色时返回 nil。

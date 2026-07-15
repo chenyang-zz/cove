@@ -5,7 +5,17 @@ import (
 
 	corecontext "github.com/boxify/api-go/internal/core/context"
 	"github.com/boxify/api-go/internal/models"
+	"github.com/google/uuid"
 )
+
+// TestAgentConfigToResponseIncludesResourceID 验证多配置响应会携带资源 ID、名称、默认标记和正确拼写的跨会话字段值。
+func TestAgentConfigToResponseIncludesResourceID(t *testing.T) {
+	id := uuid.New()
+	out := AgentConfigToResponse(&models.AgentConfig{ID: id, Name: "日常助手", EnableCrossSession: true, IsDefault: true})
+	if out.ID != id || out.Name != "日常助手" || !out.EnableCrossSession || !out.IsDefault {
+		t.Fatalf("AgentConfigToResponse() = %#v, want id %s, name and default fields", out, id)
+	}
+}
 
 // TestAgentConfigToContextPolicyUsesDefaultsForLegacyRows 验证旧记录缺少上下文字段时会使用 32K 默认策略。
 func TestAgentConfigToContextPolicyUsesDefaultsForLegacyRows(t *testing.T) {

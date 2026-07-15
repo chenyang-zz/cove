@@ -6,14 +6,15 @@
 
 package request
 
-type UpdateAgentConfigRequest struct {
+type AgentConfigFieldsRequest struct {
+	Name                       *string  `json:"name" binding:"omitempty,min=1,max=100"`
 	SystemPrompt               *string  `json:"system_prompt" binding:"omitempty,max=4000"`
 	Temperature                *float64 `json:"temperature" binding:"omitempty,gte=0.0,lte=2.0"`
 	EnableKnowledge            *bool    `json:"enable_knowledge" binding:"omitempty"`
 	EnableMemory               *bool    `json:"enable_memory" binding:"omitempty"`
 	EnableWebSearch            *bool    `json:"enable_web_search" binding:"omitempty"`
 	EnableActiveRecall         *bool    `json:"enable_active_recall" binding:"omitempty"`
-	EnableCrossSession         *bool    `json:"enalbe_cross_session" binding:"omitempty"`
+	EnableCrossSession         *bool    `json:"enable_cross_session" binding:"omitempty"`
 	ShowAvatar                 *bool    `json:"show_avatar" binding:"omitempty"`
 	HumanMode                  *bool    `json:"human_mode" binding:"omitempty"`
 	ContextEnabled             *bool    `json:"context_enabled" binding:"omitempty"`
@@ -24,6 +25,19 @@ type UpdateAgentConfigRequest struct {
 	ContextTargetRatio         *float64 `json:"context_target_ratio" binding:"omitempty,gt=0,lte=1"`
 	ContextKeepRecentTokens    *int     `json:"context_keep_recent_tokens" binding:"omitempty,gte=1"`
 	ContextSummaryMaxTokens    *int64   `json:"context_summary_max_tokens" binding:"omitempty,gte=1"`
+}
+
+type CreateAgentConfigRequest struct {
+	AgentConfigFieldsRequest
+}
+
+type UriAgentConfigIDRequest struct {
+	AgentConfigID string `uri:"agent_config_id" binding:"required,uuid"`
+}
+
+type UpdateAgentConfigRequest struct {
+	UriAgentConfigIDRequest
+	AgentConfigFieldsRequest
 }
 
 type OptimizePromptRequest struct {

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -1350,6 +1351,144 @@ type testRefreshTokenRepository struct {
 	byHash map[string]*models.RefreshToken
 }
 
+type testAgentConfigRepository struct {
+	rows map[uuid.UUID]*models.AgentConfig
+}
+
+func newTestAgentConfigRepository() *testAgentConfigRepository {
+	return &testAgentConfigRepository{rows: map[uuid.UUID]*models.AgentConfig{}}
+}
+
+func (r *testAgentConfigRepository) Create(ctx context.Context, userID uuid.UUID, config *models.AgentConfig) (*models.AgentConfig, error) {
+	if config.ID == uuid.Nil {
+		config.ID = uuid.New()
+	}
+	config.UserID = userID
+	config.Name = strings.TrimSpace(config.Name)
+	if config.Name == "" {
+		count := r.countForUser(userID)
+		if count == 0 {
+			config.Name = "默认配置"
+		} else {
+			config.Name = fmt.Sprintf("智能体配置 %d", count+1)
+		}
+	}
+	if r.nameExists(userID, config.Name, uuid.Nil) {
+		return nil, xerr.Conflict("智能体配置名称已存在")
+	}
+	config.IsDefault = r.defaultForUser(userID) == nil
+	r.rows[config.ID] = config
+	return config, nil
+}
+
+func (r *testAgentConfigRepository) List(ctx context.Context, userID uuid.UUID) ([]*models.AgentConfig, error) {
+	rows := make([]*models.AgentConfig, 0)
+	for _, row := range r.rows {
+		if row.UserID == userID {
+			rows = append(rows, row)
+		}
+	}
+	return rows, nil
+}
+
+func (r *testAgentConfigRepository) FindByID(ctx context.Context, userID uuid.UUID, configID uuid.UUID) (*models.AgentConfig, error) {
+	row, ok := r.rows[configID]
+	if !ok || row.UserID != userID {
+		return nil, xerr.NotFound("智能体配置不存在")
+	}
+	return row, nil
+}
+
+func (r *testAgentConfigRepository) FindDefault(ctx context.Context, userID uuid.UUID) (*models.AgentConfig, error) {
+	row := r.defaultForUser(userID)
+	if row == nil {
+		return nil, xerr.NotFound("默认智能体配置不存在")
+	}
+	return row, nil
+}
+
+func (r *testAgentConfigRepository) SetDefault(ctx context.Context, userID uuid.UUID, configID uuid.UUID) (*models.AgentConfig, error) {
+	row, err := r.FindByID(ctx, userID, configID)
+	if err != nil {
+		return nil, err
+	}
+	for _, candidate := range r.rows {
+		if candidate.UserID == userID {
+			candidate.IsDefault = candidate.ID == configID
+		}
+	}
+	return row, nil
+}
+
+func (r *testAgentConfigRepository) Update(ctx context.Context, userID uuid.UUID, config *models.AgentConfig) (*models.AgentConfig, error) {
+	if _, err := r.FindByID(ctx, userID, config.ID); err != nil {
+		return nil, err
+	}
+	r.rows[config.ID] = config
+	return config, nil
+}
+
+func (r *testAgentConfigRepository) UpdateFields(ctx context.Context, userID uuid.UUID, configID uuid.UUID, config *models.AgentConfig, fields *repository.AgentConfigUpdateFields) (*models.AgentConfig, error) {
+	if len(fields.Columns()) == 0 {
+		return nil, xerr.BadRequest("更新字段不能为空")
+	}
+	if _, err := r.FindByID(ctx, userID, configID); err != nil {
+		return nil, err
+	}
+	if r.nameExists(userID, config.Name, configID) {
+		return nil, xerr.Conflict("智能体配置名称已存在")
+	}
+	config.ID = configID
+	config.UserID = userID
+	r.rows[configID] = config
+	return config, nil
+}
+
+func (r *testAgentConfigRepository) Delete(ctx context.Context, userID uuid.UUID, configID uuid.UUID) error {
+	row, err := r.FindByID(ctx, userID, configID)
+	if err != nil {
+		return err
+	}
+	delete(r.rows, configID)
+	if row.IsDefault {
+		for _, candidate := range r.rows {
+			if candidate.UserID == userID {
+				candidate.IsDefault = true
+				break
+			}
+		}
+	}
+	return nil
+}
+
+func (r *testAgentConfigRepository) defaultForUser(userID uuid.UUID) *models.AgentConfig {
+	for _, row := range r.rows {
+		if row.UserID == userID && row.IsDefault {
+			return row
+		}
+	}
+	return nil
+}
+
+func (r *testAgentConfigRepository) countForUser(userID uuid.UUID) int {
+	count := 0
+	for _, row := range r.rows {
+		if row.UserID == userID {
+			count++
+		}
+	}
+	return count
+}
+
+func (r *testAgentConfigRepository) nameExists(userID uuid.UUID, name string, exceptID uuid.UUID) bool {
+	for _, row := range r.rows {
+		if row.UserID == userID && row.ID != exceptID && row.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 func newTestRefreshTokenRepository() *testRefreshTokenRepository {
 	return &testRefreshTokenRepository{byHash: map[string]*models.RefreshToken{}}
 }
@@ -2204,6 +2343,149 @@ func TestDocumentRoutesSupportCoreAuthenticatedFlow(t *testing.T) {
 	router.ServeHTTP(del, delReq)
 	if del.Code != http.StatusOK {
 		t.Fatalf("delete status = %d body=%s", del.Code, del.Body.String())
+	}
+}
+
+// TestAgentConfigRoutesSupportMultiResourceCRUD 验证智能体配置 CRUD、默认项切换以及旧单例路由移除。
+func TestAgentConfigRoutesSupportMultiResourceCRUD(t *testing.T) {
+	repo := newTestAgentConfigRepository()
+	router := newTestRouterWithConfigAndOverrides(t, config.Config{}, func(svcCtx *svc.ServiceContext) {
+		svcCtx.AgentConfigRepo = repo
+	})
+
+	request := func(method string, path string, body string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		var reader io.Reader
+		if body != "" {
+			reader = strings.NewReader(body)
+		}
+		req := httptest.NewRequest(method, path, reader)
+		if body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		req.Header.Set("Authorization", "Bearer dev-token")
+		router.ServeHTTP(w, req)
+		return w
+	}
+
+	created := request(http.MethodPost, "/api/agent-config", `{}`)
+	if created.Code != http.StatusOK {
+		t.Fatalf("POST /api/agent-config status = %d body=%s, want 200", created.Code, created.Body.String())
+	}
+	var createBody struct {
+		Data struct {
+			ID                 string  `json:"id"`
+			Name               string  `json:"name"`
+			Temperature        float64 `json:"temperature"`
+			EnableKnowledge    bool    `json:"enable_knowledge"`
+			EnableMemory       bool    `json:"enable_memory"`
+			EnableCrossSession bool    `json:"enable_cross_session"`
+			ContextEnabled     bool    `json:"context_enabled"`
+			IsDefault          bool    `json:"is_default"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &createBody); err != nil {
+		t.Fatalf("decode POST /api/agent-config response error = %v", err)
+	}
+	if createBody.Data.ID == "" || createBody.Data.Name != "默认配置" || createBody.Data.Temperature != 0.7 || !createBody.Data.EnableKnowledge || !createBody.Data.EnableMemory || !createBody.Data.ContextEnabled || !createBody.Data.IsDefault {
+		t.Fatalf("POST /api/agent-config data = %#v, want explicit defaults, resource ID and first config as default", createBody.Data)
+	}
+	if strings.Contains(created.Body.String(), "enalbe_cross_session") {
+		t.Fatalf("POST /api/agent-config body = %s, want corrected enable_cross_session field", created.Body.String())
+	}
+
+	listed := request(http.MethodGet, "/api/agent-config", "")
+	if listed.Code != http.StatusOK {
+		t.Fatalf("GET /api/agent-config status = %d body=%s, want 200", listed.Code, listed.Body.String())
+	}
+	var listBody struct {
+		Data struct {
+			List []struct {
+				ID string `json:"id"`
+			} `json:"list"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(listed.Body.Bytes(), &listBody); err != nil {
+		t.Fatalf("decode GET /api/agent-config response error = %v", err)
+	}
+	if len(listBody.Data.List) != 1 || listBody.Data.List[0].ID != createBody.Data.ID {
+		t.Fatalf("GET /api/agent-config list = %#v, want created config %s", listBody.Data.List, createBody.Data.ID)
+	}
+
+	detailPath := "/api/agent-config/" + createBody.Data.ID
+	detail := request(http.MethodGet, detailPath, "")
+	if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), createBody.Data.ID) {
+		t.Fatalf("GET %s status = %d body=%s, want created config", detailPath, detail.Code, detail.Body.String())
+	}
+
+	updated := request(http.MethodPatch, detailPath, `{"name":"日常助手","enable_cross_session":true}`)
+	if updated.Code != http.StatusOK {
+		t.Fatalf("PATCH %s status = %d body=%s, want 200", detailPath, updated.Code, updated.Body.String())
+	}
+	var updateBody struct {
+		Data struct {
+			ID                 string `json:"id"`
+			Name               string `json:"name"`
+			EnableCrossSession bool   `json:"enable_cross_session"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(updated.Body.Bytes(), &updateBody); err != nil {
+		t.Fatalf("decode PATCH %s response error = %v", detailPath, err)
+	}
+	if updateBody.Data.ID != createBody.Data.ID || updateBody.Data.Name != "日常助手" || !updateBody.Data.EnableCrossSession {
+		t.Fatalf("PATCH %s data = %#v, want enable_cross_session true", detailPath, updateBody.Data)
+	}
+
+	second := request(http.MethodPost, "/api/agent-config", `{}`)
+	if second.Code != http.StatusOK {
+		t.Fatalf("second POST /api/agent-config status = %d body=%s, want 200", second.Code, second.Body.String())
+	}
+	var secondBody struct {
+		Data struct {
+			ID        string `json:"id"`
+			Name      string `json:"name"`
+			IsDefault bool   `json:"is_default"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(second.Body.Bytes(), &secondBody); err != nil {
+		t.Fatalf("decode second POST /api/agent-config response error = %v", err)
+	}
+	if secondBody.Data.ID == "" || secondBody.Data.Name != "智能体配置 2" || secondBody.Data.IsDefault {
+		t.Fatalf("second POST /api/agent-config data = %#v, want non-default second config", secondBody.Data)
+	}
+	duplicateName := request(http.MethodPost, "/api/agent-config", `{"name":"日常助手"}`)
+	if duplicateName.Code != http.StatusConflict {
+		t.Fatalf("duplicate POST /api/agent-config status = %d body=%s, want 409", duplicateName.Code, duplicateName.Body.String())
+	}
+	setDefault := request(http.MethodPost, "/api/agent-config/"+secondBody.Data.ID+"/default", "")
+	if setDefault.Code != http.StatusOK || !strings.Contains(setDefault.Body.String(), `"is_default":true`) {
+		t.Fatalf("POST set default status = %d body=%s, want second config as default", setDefault.Code, setDefault.Body.String())
+	}
+	if repo.rows[uuid.MustParse(createBody.Data.ID)].IsDefault || !repo.rows[uuid.MustParse(secondBody.Data.ID)].IsDefault {
+		t.Fatalf("default flags after switch = first:%v second:%v, want false true", repo.rows[uuid.MustParse(createBody.Data.ID)].IsDefault, repo.rows[uuid.MustParse(secondBody.Data.ID)].IsDefault)
+	}
+
+	for _, legacy := range []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{method: http.MethodPut, path: "/api/agent-config", body: `{}`},
+		{method: http.MethodPost, path: "/api/agent-config/update", body: `{}`},
+	} {
+		res := request(legacy.method, legacy.path, legacy.body)
+		if res.Code != http.StatusNotFound {
+			t.Fatalf("%s %s status = %d body=%s, want 404", legacy.method, legacy.path, res.Code, res.Body.String())
+		}
+	}
+
+	deleted := request(http.MethodDelete, detailPath, "")
+	if deleted.Code != http.StatusOK {
+		t.Fatalf("DELETE %s status = %d body=%s, want 200", detailPath, deleted.Code, deleted.Body.String())
+	}
+	missing := request(http.MethodGet, detailPath, "")
+	if missing.Code != http.StatusNotFound {
+		t.Fatalf("GET deleted %s status = %d body=%s, want 404", detailPath, missing.Code, missing.Body.String())
 	}
 }
 
