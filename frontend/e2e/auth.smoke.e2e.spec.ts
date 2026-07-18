@@ -17,6 +17,11 @@ function testIdentity() {
   }
 }
 
+async function expectAuthenticated(page: import('@playwright/test').Page, username: string) {
+  await expect(page.getByRole('heading', { name: '你好，用户' })).toBeVisible()
+  await expect(page.getByText(`@${username}`, { exact: true })).toBeVisible()
+}
+
 test.describe('authentication smoke', () => {
   test('registers, refreshes, restores, logs out, and logs back in @smoke', async ({ page }) => {
     const identity = testIdentity()
@@ -45,7 +50,7 @@ test.describe('authentication smoke', () => {
     expect(registerEnvelope.code).toBe(0)
     expect(registerEnvelope.data?.user_id).toBeTruthy()
     expect(registerEnvelope.data?.username).toBe(identity.username)
-    await expect(page.getByRole('heading', { name: `你好，${identity.username}` })).toBeVisible()
+    await expectAuthenticated(page, identity.username)
 
     const oldRefreshToken = await page.evaluate((key) => {
       const raw = window.localStorage.getItem(key)
@@ -64,7 +69,7 @@ test.describe('authentication smoke', () => {
     await page.reload()
     const refreshResponse = await refreshResponsePromise
     expect(refreshResponse.status()).toBe(200)
-    await expect(page.getByRole('heading', { name: `你好，${identity.username}` })).toBeVisible()
+    await expectAuthenticated(page, identity.username)
 
     const refreshRotated = await page.evaluate(({ key, previousToken }) => {
       const raw = window.localStorage.getItem(key)
@@ -76,7 +81,6 @@ test.describe('authentication smoke', () => {
     }, { key: sessionStorageKey, previousToken: oldRefreshToken })
     expect(refreshRotated).toBe(true)
 
-    await page.getByRole('button', { name: '打开会话列表' }).click()
     await page.getByRole('button', { name: '退出登录' }).click()
     await expect(page.getByRole('heading', { name: '欢迎回来' })).toBeVisible()
     await expect.poll(() => page.evaluate((key) => window.localStorage.getItem(key), sessionStorageKey)).toBeNull()
@@ -89,7 +93,6 @@ test.describe('authentication smoke', () => {
     await page.getByRole('button', { name: '登录' }).click()
     const loginResponse = await loginResponsePromise
     expect(loginResponse.status()).toBe(200)
-    await expect(page.getByRole('heading', { name: `你好，${identity.username}` })).toBeVisible()
+    await expectAuthenticated(page, identity.username)
   })
 })
-
