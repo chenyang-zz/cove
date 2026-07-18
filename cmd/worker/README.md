@@ -4,6 +4,8 @@ Cove 后台任务处理器，基于 [asynq](https://github.com/hibiken/asynq) + 
 
 ## 运行
 
+`make` 快捷入口位于 Cove 工作区根目录；直接 Go 命令从 `packages/server/` 运行。
+
 ```bash
 make worker
 # 或直接

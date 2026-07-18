@@ -65,6 +65,8 @@
 - Go 1.25+
 - Docker & Docker Compose
 
+以下 `make` 命令统一从包含 `packages/` 的 Cove 工作区根目录运行。直接使用 `go run`、`go test` 等 Go 命令时，仍在 `packages/server/` 中运行。
+
 ### 1. 启动依赖服务
 
 ```bash
@@ -367,7 +369,6 @@ go test ./internal/agent/... # Agent 编排
 │   ├── util/           # 工具函数
 │   ├── worker/         # 任务处理器
 │   └── xerr/           # 错误定义
-├── Makefile
 └── README.md
 ```
 

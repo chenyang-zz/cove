@@ -16,6 +16,8 @@
 
 ## 开发环境搭建
 
+以下 `make` 命令从 Cove 工作区根目录运行；Docker、Git 与直接 Go 命令仍从 `packages/server/` 运行。
+
 ```bash
 # 1. 启动依赖服务
 docker compose -f deployments/docker-compose.yml up -d

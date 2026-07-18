@@ -45,6 +45,7 @@ This project is indexed by GitNexus as **cove-api** (9736 symbols, 45165 relatio
 
 ## Testing
 
+- Shared Make targets live in the Cove workspace root `Makefile`. Run targets such as `make api`, `make migration`, and `make docs` from `/Users/sheepzhao/WorkSpace/agent/boxify/cove`; run direct Git and Go commands from this repository root.
 - When adding or modifying test functions, you must place a Chinese comment immediately above each test function explaining what the test verifies.
 
 ## Generated Code

@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// TestScanLogicsRecognizesServiceMethods 验证集中式 Service 方法可满足路由 Logic 同步检查。
-func TestScanLogicsRecognizesServiceMethods(t *testing.T) {
+// TestScanLogicsDoesNotTreatServiceMethodsAsRouteLogic 验证集中式 Service 方法不会冒充路由专属 Logic。
+func TestScanLogicsDoesNotTreatServiceMethodsAsRouteLogic(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "internal", "logic", "gateway")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -21,7 +21,7 @@ func TestScanLogicsRecognizesServiceMethods(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got[logicKey("gateway", "ListAccounts")] != path {
-		t.Fatalf("service method was not indexed: %#v", got)
+	if _, ok := got[logicKey("gateway", "ListAccounts")]; ok {
+		t.Fatalf("service method was indexed as route logic: %#v", got)
 	}
 }

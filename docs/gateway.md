@@ -1127,6 +1127,8 @@ Gateway、API 和 Worker 至少应共享：
 
 分别启动：
 
+以下 `make` 命令从 Cove 工作区根目录运行。
+
 ```bash
 make migration
 make api
@@ -1315,6 +1317,8 @@ go test -count=1 \
 ```
 
 管理 API 契约或 DTO 变化后还应运行：
+
+其中 `make docs` 从 Cove 工作区根目录运行，`go run` 从 `packages/server/` 运行。
 
 ```bash
 make docs

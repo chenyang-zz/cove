@@ -45,8 +45,8 @@ func TestAccountResponseMasksEncryptedCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := &Service{svc: &svc.ServiceContext{SecretCipher: cipher}}
-	got, err := service.accountResponse(&models.ChannelAccount{EncryptedCredentials: models.JSONMap{"bot_token": encrypted}})
+	svcCtx := &svc.ServiceContext{SecretCipher: cipher}
+	got, err := accountResponse(svcCtx, &models.ChannelAccount{EncryptedCredentials: models.JSONMap{"bot_token": encrypted}})
 	if err != nil {
 		t.Fatal(err)
 	}

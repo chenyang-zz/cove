@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"strings"
-
 	gatewaylogic "github.com/boxify/api-go/internal/logic/gateway"
 	"github.com/boxify/api-go/internal/svc"
 	"github.com/boxify/api-go/internal/transport/http/request"
@@ -10,25 +8,37 @@ import (
 	"github.com/boxify/api-go/internal/util"
 	"github.com/boxify/api-go/internal/xerr"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
-// GatewayHandler 暴露网关控制面 API。
-type GatewayHandler struct{ service *gatewaylogic.Service }
-
-// NewGatewayHandler 创建网关处理器。
-func NewGatewayHandler(svcCtx *svc.ServiceContext) GatewayHandler {
-	return GatewayHandler{service: gatewaylogic.NewService(svcCtx)}
+type GatewayHandler struct {
+	svc *svc.ServiceContext
 }
 
-func (h GatewayHandler) Providers(c *gin.Context) { response.OK(c, h.service.Providers()) }
+func NewGatewayHandler(svcCtx *svc.ServiceContext) GatewayHandler {
+	return GatewayHandler{svc: svcCtx}
+}
 
-func (h GatewayHandler) ListAccounts(c *gin.Context) {
-	userID, ok := gatewayUserID(c)
-	if !ok {
+func (h GatewayHandler) Providers(c *gin.Context) {
+	userID, err := util.UserIDFromContext(c.Request.Context())
+	if err != nil {
+		response.FromError(c, err)
 		return
 	}
-	out, err := h.service.ListAccounts(c.Request.Context(), userID)
+	out, err := gatewaylogic.NewProvidersLogic(c.Request.Context(), h.svc).Providers(userID)
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	response.OK(c, out)
+}
+
+func (h GatewayHandler) ListAccounts(c *gin.Context) {
+	userID, err := util.UserIDFromContext(c.Request.Context())
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	out, err := gatewaylogic.NewListAccountsLogic(c.Request.Context(), h.svc).ListAccounts(userID)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -37,16 +47,17 @@ func (h GatewayHandler) ListAccounts(c *gin.Context) {
 }
 
 func (h GatewayHandler) CreateAccount(c *gin.Context) {
-	var input request.CreateChannelAccountRequest
-	if err := c.ShouldBindJSON(&input); err != nil {
+	var body request.CreateChannelAccountRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
 		response.FromError(c, xerr.Validation(err))
 		return
 	}
-	userID, ok := gatewayUserID(c)
-	if !ok {
+	userID, err := util.UserIDFromContext(c.Request.Context())
+	if err != nil {
+		response.FromError(c, err)
 		return
 	}
-	out, err := h.service.CreateAccount(c.Request.Context(), userID, &input)
+	out, err := gatewaylogic.NewCreateAccountLogic(c.Request.Context(), h.svc).CreateAccount(userID, &body)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -55,11 +66,21 @@ func (h GatewayHandler) CreateAccount(c *gin.Context) {
 }
 
 func (h GatewayHandler) GetAccount(c *gin.Context) {
-	userID, accountID, ok := gatewayUserAndParamID(c, "id")
-	if !ok {
+	var query request.UriGatewayIDRequest
+	if err := c.ShouldBindUri(&query); err != nil {
+		response.FromError(c, xerr.Validation(err))
 		return
 	}
-	out, err := h.service.GetAccount(c.Request.Context(), userID, accountID)
+	if err := c.ShouldBindQuery(&query); err != nil {
+		response.FromError(c, xerr.Validation(err))
+		return
+	}
+	userID, err := util.UserIDFromContext(c.Request.Context())
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	out, err := gatewaylogic.NewGetAccountLogic(c.Request.Context(), h.svc).GetAccount(userID, &query)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -68,16 +89,21 @@ func (h GatewayHandler) GetAccount(c *gin.Context) {
 }
 
 func (h GatewayHandler) UpdateAccount(c *gin.Context) {
-	userID, accountID, ok := gatewayUserAndParamID(c, "id")
-	if !ok {
-		return
-	}
-	var input request.UpdateChannelAccountRequest
-	if err := c.ShouldBindJSON(&input); err != nil {
+	var body request.UpdateChannelAccountDocRequest
+	if err := c.ShouldBindUri(&body.UriGatewayIDRequest); err != nil {
 		response.FromError(c, xerr.Validation(err))
 		return
 	}
-	out, err := h.service.UpdateAccount(c.Request.Context(), userID, accountID, &input)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.FromError(c, xerr.Validation(err))
+		return
+	}
+	userID, err := util.UserIDFromContext(c.Request.Context())
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	out, err := gatewaylogic.NewUpdateAccountLogic(c.Request.Context(), h.svc).UpdateAccount(userID, &body)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -86,35 +112,59 @@ func (h GatewayHandler) UpdateAccount(c *gin.Context) {
 }
 
 func (h GatewayHandler) DeleteAccount(c *gin.Context) {
-	userID, accountID, ok := gatewayUserAndParamID(c, "id")
-	if !ok {
+	var body request.UriGatewayIDRequest
+	if err := c.ShouldBindUri(&body); err != nil {
+		response.FromError(c, xerr.Validation(err))
 		return
 	}
-	if err := h.service.DeleteAccount(c.Request.Context(), userID, accountID); err != nil {
+	userID, err := util.UserIDFromContext(c.Request.Context())
+	if err != nil {
 		response.FromError(c, err)
 		return
 	}
-	response.OK(c, response.GatewayStatusResponse{Status: "deleted"})
+	out, err := gatewaylogic.NewDeleteAccountLogic(c.Request.Context(), h.svc).DeleteAccount(userID, &body)
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	response.OK(c, out)
 }
 
 func (h GatewayHandler) TestAccount(c *gin.Context) {
-	userID, accountID, ok := gatewayUserAndParamID(c, "id")
-	if !ok {
+	var body request.UriGatewayIDRequest
+	if err := c.ShouldBindUri(&body); err != nil {
+		response.FromError(c, xerr.Validation(err))
 		return
 	}
-	if err := h.service.TestAccount(c.Request.Context(), userID, accountID); err != nil {
+	userID, err := util.UserIDFromContext(c.Request.Context())
+	if err != nil {
 		response.FromError(c, err)
 		return
 	}
-	response.OK(c, gin.H{"status": "healthy"})
+	out, err := gatewaylogic.NewTestAccountLogic(c.Request.Context(), h.svc).TestAccount(userID, &body)
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	response.OK(c, out)
 }
 
 func (h GatewayHandler) ListPairings(c *gin.Context) {
-	userID, accountID, ok := gatewayUserAndParamID(c, "id")
-	if !ok {
+	var query request.UriGatewayIDRequest
+	if err := c.ShouldBindUri(&query); err != nil {
+		response.FromError(c, xerr.Validation(err))
 		return
 	}
-	out, err := h.service.ListPairings(c.Request.Context(), userID, accountID)
+	if err := c.ShouldBindQuery(&query); err != nil {
+		response.FromError(c, xerr.Validation(err))
+		return
+	}
+	userID, err := util.UserIDFromContext(c.Request.Context())
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	out, err := gatewaylogic.NewListPairingsLogic(c.Request.Context(), h.svc).ListPairings(userID, &query)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -123,11 +173,17 @@ func (h GatewayHandler) ListPairings(c *gin.Context) {
 }
 
 func (h GatewayHandler) ApprovePairing(c *gin.Context) {
-	userID, identityID, ok := gatewayUserAndParamID(c, "id")
-	if !ok {
+	var body request.UriGatewayIDRequest
+	if err := c.ShouldBindUri(&body); err != nil {
+		response.FromError(c, xerr.Validation(err))
 		return
 	}
-	out, err := h.service.ApprovePairing(c.Request.Context(), userID, identityID)
+	userID, err := util.UserIDFromContext(c.Request.Context())
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	out, err := gatewaylogic.NewApprovePairingLogic(c.Request.Context(), h.svc).ApprovePairing(userID, &body)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -136,11 +192,17 @@ func (h GatewayHandler) ApprovePairing(c *gin.Context) {
 }
 
 func (h GatewayHandler) DenyPairing(c *gin.Context) {
-	userID, identityID, ok := gatewayUserAndParamID(c, "id")
-	if !ok {
+	var body request.UriGatewayIDRequest
+	if err := c.ShouldBindUri(&body); err != nil {
+		response.FromError(c, xerr.Validation(err))
 		return
 	}
-	out, err := h.service.DenyPairing(c.Request.Context(), userID, identityID)
+	userID, err := util.UserIDFromContext(c.Request.Context())
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	out, err := gatewaylogic.NewDenyPairingLogic(c.Request.Context(), h.svc).DenyPairing(userID, &body)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -149,20 +211,17 @@ func (h GatewayHandler) DenyPairing(c *gin.Context) {
 }
 
 func (h GatewayHandler) ListBindings(c *gin.Context) {
-	userID, ok := gatewayUserID(c)
-	if !ok {
+	var query request.ListChannelBindingsRequest
+	if err := c.ShouldBindQuery(&query); err != nil {
+		response.FromError(c, xerr.Validation(err))
 		return
 	}
-	var accountID *uuid.UUID
-	if raw := strings.TrimSpace(c.Query("account_id")); raw != "" {
-		parsed, err := uuid.Parse(raw)
-		if err != nil {
-			response.FromError(c, xerr.BadRequest("渠道账号 ID 无效"))
-			return
-		}
-		accountID = &parsed
+	userID, err := util.UserIDFromContext(c.Request.Context())
+	if err != nil {
+		response.FromError(c, err)
+		return
 	}
-	out, err := h.service.ListBindings(c.Request.Context(), userID, accountID)
+	out, err := gatewaylogic.NewListBindingsLogic(c.Request.Context(), h.svc).ListBindings(userID, &query)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -171,16 +230,17 @@ func (h GatewayHandler) ListBindings(c *gin.Context) {
 }
 
 func (h GatewayHandler) CreateBinding(c *gin.Context) {
-	var input request.CreateChannelBindingRequest
-	if err := c.ShouldBindJSON(&input); err != nil {
+	var body request.CreateChannelBindingRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
 		response.FromError(c, xerr.Validation(err))
 		return
 	}
-	userID, ok := gatewayUserID(c)
-	if !ok {
+	userID, err := util.UserIDFromContext(c.Request.Context())
+	if err != nil {
+		response.FromError(c, err)
 		return
 	}
-	out, err := h.service.CreateBinding(c.Request.Context(), userID, &input)
+	out, err := gatewaylogic.NewCreateBindingLogic(c.Request.Context(), h.svc).CreateBinding(userID, &body)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -189,11 +249,21 @@ func (h GatewayHandler) CreateBinding(c *gin.Context) {
 }
 
 func (h GatewayHandler) GetBinding(c *gin.Context) {
-	userID, bindingID, ok := gatewayUserAndParamID(c, "id")
-	if !ok {
+	var query request.UriGatewayIDRequest
+	if err := c.ShouldBindUri(&query); err != nil {
+		response.FromError(c, xerr.Validation(err))
 		return
 	}
-	out, err := h.service.GetBinding(c.Request.Context(), userID, bindingID)
+	if err := c.ShouldBindQuery(&query); err != nil {
+		response.FromError(c, xerr.Validation(err))
+		return
+	}
+	userID, err := util.UserIDFromContext(c.Request.Context())
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	out, err := gatewaylogic.NewGetBindingLogic(c.Request.Context(), h.svc).GetBinding(userID, &query)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -202,16 +272,21 @@ func (h GatewayHandler) GetBinding(c *gin.Context) {
 }
 
 func (h GatewayHandler) UpdateBinding(c *gin.Context) {
-	userID, bindingID, ok := gatewayUserAndParamID(c, "id")
-	if !ok {
-		return
-	}
-	var input request.UpdateChannelBindingRequest
-	if err := c.ShouldBindJSON(&input); err != nil {
+	var body request.UpdateChannelBindingDocRequest
+	if err := c.ShouldBindUri(&body.UriGatewayIDRequest); err != nil {
 		response.FromError(c, xerr.Validation(err))
 		return
 	}
-	out, err := h.service.UpdateBinding(c.Request.Context(), userID, bindingID, &input)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.FromError(c, xerr.Validation(err))
+		return
+	}
+	userID, err := util.UserIDFromContext(c.Request.Context())
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	out, err := gatewaylogic.NewUpdateBindingLogic(c.Request.Context(), h.svc).UpdateBinding(userID, &body)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -220,35 +295,20 @@ func (h GatewayHandler) UpdateBinding(c *gin.Context) {
 }
 
 func (h GatewayHandler) DeleteBinding(c *gin.Context) {
-	userID, bindingID, ok := gatewayUserAndParamID(c, "id")
-	if !ok {
+	var body request.UriGatewayIDRequest
+	if err := c.ShouldBindUri(&body); err != nil {
+		response.FromError(c, xerr.Validation(err))
 		return
 	}
-	if err := h.service.DeleteBinding(c.Request.Context(), userID, bindingID); err != nil {
-		response.FromError(c, err)
-		return
-	}
-	response.OK(c, response.GatewayStatusResponse{Status: "deleted"})
-}
-
-func gatewayUserID(c *gin.Context) (uuid.UUID, bool) {
 	userID, err := util.UserIDFromContext(c.Request.Context())
 	if err != nil {
 		response.FromError(c, err)
-		return uuid.Nil, false
+		return
 	}
-	return userID, true
-}
-
-func gatewayUserAndParamID(c *gin.Context, name string) (uuid.UUID, uuid.UUID, bool) {
-	userID, ok := gatewayUserID(c)
-	if !ok {
-		return uuid.Nil, uuid.Nil, false
-	}
-	id, err := uuid.Parse(c.Param(name))
+	out, err := gatewaylogic.NewDeleteBindingLogic(c.Request.Context(), h.svc).DeleteBinding(userID, &body)
 	if err != nil {
-		response.FromError(c, xerr.BadRequest("ID 无效"))
-		return uuid.Nil, uuid.Nil, false
+		response.FromError(c, err)
+		return
 	}
-	return userID, id, true
+	response.OK(c, out)
 }

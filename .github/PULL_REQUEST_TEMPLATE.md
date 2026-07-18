@@ -19,7 +19,7 @@ Closes #(Issue 编号，如有)
 - [ ] 代码通过 `go vet ./...` 与 `gofmt` 检查
 - [ ] 新增功能附带单元测试（测试函数上方附中文注释说明验证点）
 - [ ] 所有测试通过：`go test ./...`
-- [ ] 代码生成产物已提交（如 `make gen-route`、`make gen-repository`、`make gen-docs` 的输出）
+- [ ] 代码生成产物已提交（从 Cove 工作区根目录运行 `make gen-route`、`make gen-repository`、`make gen-docs`）
 - [ ] 变更动机与影响范围已在描述中说明
 
 ## 测试方式

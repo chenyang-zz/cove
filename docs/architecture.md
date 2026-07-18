@@ -203,6 +203,8 @@ jwt:
 
 ### 启动接受路径
 
+以下 `make` 命令从 Cove 工作区根目录运行；Docker 与直接 Go 命令从 `packages/server/` 运行。
+
 1. `docker compose -f deployments/docker-compose.yml up -d` — 启动基础服务（PG / ES / Neo4j / Redis）。
 2. `make migration` — 执行数据库迁移。
 3. `make api` — 启动 HTTP 服务（`:8000`）。
@@ -256,5 +258,5 @@ jwt:
 │   ├── util/           # 工具函数
 │   ├── worker/         # 任务处理器
 │   └── xerr/           # 错误定义
-└── Makefile
+└── README.md
 ```

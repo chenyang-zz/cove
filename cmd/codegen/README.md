@@ -352,7 +352,9 @@ bookRoutes.POST("", book.Create)
 | `skipped` | 文件已存在（对应生成策略跳过） |
 | `unchanged` | 格式化后内容一致，无需写入 |
 
-## Makefile 快捷入口
+## 工作区 Makefile 快捷入口
+
+以下命令从包含 `packages/` 的 Cove 工作区根目录运行。
 
 ```bash
 make gen-route                       # 生成 handler + logic
