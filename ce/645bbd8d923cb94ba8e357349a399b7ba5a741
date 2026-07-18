@@ -1,0 +1,43 @@
+packages/app/frontend/src/features/profile/ProfileScreen.test.tsx
+  s_caa2097fd07076::t_50ace0c6bf11dc 132,156-164
+  s_caa2097fd07076::t_9de764239d33fd 129-131
+  s_caa2097fd07076::t_0b9f47b809f0c8 133-135
+  s_d620acfd2ed45f::t_f553adc6476220 126-128,136-142
+e2e/REAL_DATABASE_COVERAGE.md
+  s_caa2097fd07076::t_4fa20bef359a00 22
+  s_caa2097fd07076::t_3e17e7dbee60c0 24
+  s_caa2097fd07076::t_8cf56926a5a887 14-21,23,25
+  s_caa2097fd07076::t_98df8075e54767 9
+  s_caa2097fd07076::t_929aba65cb857f 26
+e2e/README.md
+  s_caa2097fd07076::t_8cf56926a5a887 31-32,35-36,87-98
+  s_caa2097fd07076::t_73a3d8882d36c2 99
+.codex/rules/e2e-testing.md
+  s_caa2097fd07076::t_8cf56926a5a887 71
+packages/app/frontend/src/features/profile/ProfileScreen.tsx
+  s_caa2097fd07076::t_50ace0c6bf11dc 184-193
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "ce645bbd8d923cb94ba8e357349a399b7ba5a741",
+  "prompts": {},
+  "sessions": {
+    "s_caa2097fd07076": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7408-4aed-7012-b7fb-1f20995e2d3d",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    },
+    "s_d620acfd2ed45f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_d620acfd2ed45f",
+        "model": "unknown"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
