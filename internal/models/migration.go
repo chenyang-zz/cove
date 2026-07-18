@@ -23,5 +23,10 @@ func MigrationModels() []any {
 		&Tag{},
 		&Skill{},
 		&ToolConfig{},
+		&ChannelAccount{},
+		&ChannelIdentity{},
+		&ChannelBinding{},
+		&ChannelInboxEvent{},
+		&ChannelOutboxMessage{},
 	}
 }

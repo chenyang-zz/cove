@@ -537,3 +537,63 @@ func TestKnowledgeBaseRepositoryFindDefaultWhenPostgresEnvIsConfigured(t *testin
 		t.Fatalf("FindDefault = %+v, want current user's default", found)
 	}
 }
+
+// TestKnowledgeBaseRepositorySetDefaultWhenPostgresEnvIsConfigured 验证默认知识库切换具有唯一性和用户隔离。
+func TestKnowledgeBaseRepositorySetDefaultWhenPostgresEnvIsConfigured(t *testing.T) {
+	db := newAuthTestDB(t)
+	ctx := context.Background()
+	userRepo := repositorypostgres.NewUserRepository(db)
+	kbRepo := repositorypostgres.NewKnowledgeBaseRepository(db)
+
+	user, err := userRepo.Create(ctx, &models.User{Username: "kb-set-default-" + uuid.NewString(), PasswordHash: "hash"})
+	if err != nil {
+		t.Fatalf("Create user error = %v", err)
+	}
+	otherUser, err := userRepo.Create(ctx, &models.User{Username: "kb-set-default-other-" + uuid.NewString(), PasswordHash: "hash"})
+	if err != nil {
+		t.Fatalf("Create other user error = %v", err)
+	}
+	t.Cleanup(func() {
+		db.WithContext(context.Background()).Exec("DELETE FROM knowledge_bases WHERE user_id IN ?", []uuid.UUID{user.ID, otherUser.ID})
+		db.WithContext(context.Background()).Exec("DELETE FROM users WHERE id IN ?", []uuid.UUID{user.ID, otherUser.ID})
+	})
+
+	oldDefault, err := kbRepo.Create(ctx, user.ID, &models.KnowledgeBase{Name: "旧默认", IsDefault: true})
+	if err != nil {
+		t.Fatalf("Create old default error = %v", err)
+	}
+	target, err := kbRepo.Create(ctx, user.ID, &models.KnowledgeBase{Name: "新默认"})
+	if err != nil {
+		t.Fatalf("Create target error = %v", err)
+	}
+	otherDefault, err := kbRepo.Create(ctx, otherUser.ID, &models.KnowledgeBase{Name: "其他用户默认", IsDefault: true})
+	if err != nil {
+		t.Fatalf("Create other default error = %v", err)
+	}
+
+	setter, ok := kbRepo.(interface {
+		SetDefault(context.Context, uuid.UUID, uuid.UUID) (*models.KnowledgeBase, error)
+	})
+	if !ok {
+		t.Fatal("KnowledgeBaseRepository does not implement SetDefault")
+	}
+	selected, err := setter.SetDefault(ctx, user.ID, target.ID)
+	if err != nil {
+		t.Fatalf("SetDefault error = %v", err)
+	}
+	if selected.ID != target.ID || !selected.IsDefault {
+		t.Fatalf("selected = %+v, want target as default", selected)
+	}
+
+	oldRow, err := kbRepo.FindByID(ctx, user.ID, oldDefault.ID)
+	if err != nil {
+		t.Fatalf("Find old default error = %v", err)
+	}
+	otherRow, err := kbRepo.FindByID(ctx, otherUser.ID, otherDefault.ID)
+	if err != nil {
+		t.Fatalf("Find other default error = %v", err)
+	}
+	if oldRow.IsDefault || !otherRow.IsDefault {
+		t.Fatalf("default flags old=%v other=%v, want false/true", oldRow.IsDefault, otherRow.IsDefault)
+	}
+}

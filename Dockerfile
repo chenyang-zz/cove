@@ -3,7 +3,7 @@
 # Cove API - Multi-stage Dockerfile
 # =============================================================================
 # Build stage: 编译 Go 二进制
-#   CMD_TARGET: api | worker（通过 --build-arg 切换入口）
+#   CMD_TARGET: api | worker | gateway（通过 --build-arg 切换入口）
 # =============================================================================
 FROM golang:1.25-alpine AS builder
 
@@ -42,10 +42,10 @@ COPY --from=builder /app/configs/config.yml.example /app/configs/config.yml.exam
 
 USER cove
 
-# api 服务暴露端口，worker 不暴露；compose 按服务决定是否 publish
-EXPOSE 8000
+# api 和 gateway 服务端口；compose 按服务决定是否 publish
+EXPOSE 8000 8010
 
-# 默认 healthcheck 用于 api，worker 服务在 compose 中覆盖为 disable
+# 默认 healthcheck 用于 api，worker/gateway 服务在 compose 中覆盖
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
     CMD wget -qO- http://localhost:8000/api/health || exit 1
 

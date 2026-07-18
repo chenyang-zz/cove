@@ -3,10 +3,12 @@ package svc
 import (
 	"context"
 	"errors"
+	"net/http"
 	"sync"
 	"time"
 
 	"github.com/boxify/api-go/internal/config"
+	corechannel "github.com/boxify/api-go/internal/core/channel"
 	corellm "github.com/boxify/api-go/internal/core/llm"
 	coremcp "github.com/boxify/api-go/internal/core/mcp"
 	"github.com/boxify/api-go/internal/core/prompt"
@@ -16,6 +18,7 @@ import (
 	ragsearch "github.com/boxify/api-go/internal/core/rag/search"
 	"github.com/boxify/api-go/internal/core/rag/webcrawl"
 	domainskills "github.com/boxify/api-go/internal/domain/skills"
+	infrastructurechannel "github.com/boxify/api-go/internal/infrastructure/channel"
 	infraes "github.com/boxify/api-go/internal/infrastructure/db/es"
 	dbneo4j "github.com/boxify/api-go/internal/infrastructure/db/neo4j"
 	dbpostgres "github.com/boxify/api-go/internal/infrastructure/db/postgres"
@@ -69,6 +72,7 @@ type ServiceContext struct {
 	ImageRepo                    repository.ImageRepository
 	TagRepo                      repository.TagRepository
 	RAGChunkRepo                 repository.RAGChunkRepository
+	ChannelGatewayRepo           repository.ChannelGatewayRepository
 	RAGSearcher                  *ragsearch.Searcher[models.RAGChunkSource]
 	RAGClassifier                *ragclassifier.Classifier
 	RAGDocumentParser            *ragparser.Parser
@@ -79,10 +83,11 @@ type ServiceContext struct {
 	SecretCipher *security.SecretCipher
 	TokenIssuer  *security.TokenIssuer
 
-	PromptManager  *prompt.Manager
-	PromptClient   *promptsgen.Client
-	LLMManager     *corellm.Manager
-	MCPToolService *coremcp.Service
+	PromptManager   *prompt.Manager
+	PromptClient    *promptsgen.Client
+	LLMManager      *corellm.Manager
+	MCPToolService  *coremcp.Service
+	ChannelRegistry *corechannel.Registry
 
 	closeOnce sync.Once
 	closeErr  error
@@ -110,6 +115,14 @@ func New(ctx context.Context, cfg config.Config) (*ServiceContext, error) {
 	if err != nil {
 		return nil, xerr.Wrapf(err, "注册内置技能失败")
 	}
+	callbackTimeout := 10 * time.Second
+	if parsed, parseErr := time.ParseDuration(cfg.Gateway.CallbackTimeout); parseErr == nil && parsed > 0 {
+		callbackTimeout = parsed
+	}
+	channelRegistry, err := infrastructurechannel.NewRegistry(&http.Client{Timeout: callbackTimeout})
+	if err != nil {
+		return nil, xerr.Wrapf(err, "创建渠道注册表失败")
+	}
 
 	db, err := dbpostgres.NewGormDB(ctx, dbpostgres.Config{URL: cfg.Database.URL})
 	if err != nil {
@@ -122,11 +135,12 @@ func New(ctx context.Context, cfg config.Config) (*ServiceContext, error) {
 		SecretCipher: cipher,
 		TokenIssuer:  security.NewTokenIssuer(cfg.JWT.Secret, accessTokenTTL),
 
-		PromptManager:  promptManager,
-		PromptClient:   promptsgen.NewClient(promptManager),
-		LLMManager:     BuildLLMManager(),
-		MCPToolService: mcpToolService,
-		SkillRegistry:  skillRegistry,
+		PromptManager:   promptManager,
+		PromptClient:    promptsgen.NewClient(promptManager),
+		LLMManager:      BuildLLMManager(),
+		MCPToolService:  mcpToolService,
+		SkillRegistry:   skillRegistry,
+		ChannelRegistry: channelRegistry,
 	}
 	bindPostgresRepositories(svcCtx, db)
 
@@ -213,6 +227,7 @@ func bindPostgresRepositories(s *ServiceContext, db *gorm.DB) {
 	s.DocumentRepo = repositorypostgres.NewDocumentRepository(db)
 	s.ImageRepo = repositorypostgres.NewImageRepository(db)
 	s.TagRepo = repositorypostgres.NewTagRepository(db)
+	s.ChannelGatewayRepo = repositorypostgres.NewChannelGatewayRepository(db)
 }
 
 func (s *ServiceContext) WithTx(ctx context.Context, fn func(txSvc *ServiceContext) error) error {
@@ -257,6 +272,7 @@ func newTxContext(s *ServiceContext) ServiceContext {
 		ImageRepo:                    s.ImageRepo,
 		TagRepo:                      s.TagRepo,
 		RAGChunkRepo:                 s.RAGChunkRepo,
+		ChannelGatewayRepo:           s.ChannelGatewayRepo,
 		RAGSearcher:                  s.RAGSearcher,
 		RAGClassifier:                s.RAGClassifier,
 		RAGDocumentParser:            s.RAGDocumentParser,
@@ -269,6 +285,7 @@ func newTxContext(s *ServiceContext) ServiceContext {
 		PromptClient:                 s.PromptClient,
 		LLMManager:                   s.LLMManager,
 		MCPToolService:               s.MCPToolService,
+		ChannelRegistry:              s.ChannelRegistry,
 		closeErr:                     s.closeErr,
 	}
 }

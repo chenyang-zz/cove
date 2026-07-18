@@ -13,7 +13,6 @@ import (
 	flowchat "github.com/boxify/api-go/internal/domain/flow/chat"
 	"github.com/boxify/api-go/internal/domain/types"
 	"github.com/boxify/api-go/internal/infrastructure/realtime"
-	"github.com/boxify/api-go/internal/mapper"
 	"github.com/boxify/api-go/internal/models"
 	"github.com/boxify/api-go/internal/observability/xlog"
 	"github.com/boxify/api-go/internal/svc"
@@ -135,132 +134,66 @@ func (l *ChatStreamLogic) runChatTurnBG(
 	attachments []*types.MessageAttachment,
 ) {
 	topic := realtime.ConversationTopic(conversationID)
-
-	// 检查会话存在
-	if _, err := l.svcCtx.ConversationRepo.FindByID(ctx, userID, conversationID); err != nil {
-		_ = l.svcCtx.Realtime.Publish(ctx, topic, types.NewErrorEvent("会话不存在"))
-		return
+	var agentConfigID *uuid.UUID
+	if strings.TrimSpace(input.AgentConfigID) != "" {
+		parsed, err := uuid.Parse(input.AgentConfigID)
+		if err != nil {
+			_ = l.svcCtx.Realtime.Publish(ctx, topic, types.NewErrorEvent("生成失败：智能体配置 ID 无效"))
+			return
+		}
+		agentConfigID = &parsed
 	}
-	agentConfig, err := l.chatAgentConfig(ctx, userID, input.AgentConfigID)
-	if err != nil {
-		l.log.WarnContext(ctx, "获取聊天 Agent 配置失败", slog.String("error", err.Error()))
-		_ = l.svcCtx.Realtime.Publish(ctx, topic, types.NewErrorEvent("生成失败："+err.Error()))
-		return
-	}
-	persona, err := l.chatActivePersona(ctx, userID)
-	if err != nil {
-		l.log.WarnContext(ctx, "获取生效角色失败", slog.String("error", err.Error()))
-		_ = l.svcCtx.Realtime.Publish(ctx, topic, types.NewErrorEvent("生成失败："+err.Error()))
-		return
-	}
-	runtimeConfig := resolveChatRuntimeConfig(input, agentConfig, persona)
-	l.log.InfoContext(ctx, "聊天最终系统提示词",
-		slog.String("user_id", userID.String()),
-		slog.String("conversation_id", conversationID.String()),
-		slog.String("system_prompt", runtimeConfig.SystemPrompt),
-	)
-
-	messageCh, err := flowchat.NewOrchestrator(l.svcCtx).Run(ctx, flowchat.Input{
-		UserID:               userID,
-		ConversationID:       conversationID,
-		CurrentUserMessageID: userMessageID,
-		Message:              input.Message,
-		Attachments:          attachments,
-		EnableKnowledge:      runtimeConfig.EnableKnowledge,
-		Temperature:          runtimeConfig.Temperature,
-		SystemPrompt:         runtimeConfig.SystemPrompt,
-		ContextPolicy:        runtimeConfig.ContextPolicy,
-	})
-	if err != nil {
-		l.log.WarnContext(ctx, "后台生成回复失败", slog.String("error", err.Error()))
-		_ = l.svcCtx.Realtime.Publish(ctx, topic, types.NewErrorEvent("生成失败："+err.Error()))
-		return
-	}
-
-	var assistantMessageID string
-	parts := make([]models.MessagePart, 0, 8)
 	sentToken := false
-	for message := range messageCh {
+	reportedError := false
+	result, err := RunTurn(ctx, l.svcCtx, TurnInput{
+		UserID: userID, ConversationID: conversationID, CurrentUserMessageID: userMessageID,
+		Message: input.Message, Attachments: attachments, AgentConfigID: agentConfigID,
+		EnableKnowledge: input.EnableKnowledge, ToolPolicy: flowchat.ToolPolicyInherit,
+	}, func(message flow.Message) {
 		switch msg := message.(type) {
 		case *flow.AssistantMessage:
 			answer := strings.TrimSpace(msg.Answer)
-			// 用最终 answer 对齐 parts 正文，content 仍以 answer 为真源
-			parts = finalizePartsWithAnswer(parts, answer)
-			assistantMsg, saveErr := l.svcCtx.MessageRepo.Create(ctx, userID, &models.Message{
-				ConversationID: conversationID,
-				Role:           string(llm.AssistantRole),
-				Content:        answer,
-				MetaData:       buildAssistantMeta(parts, false),
-			})
-			if saveErr != nil {
-				l.log.WarnContext(ctx, "保存AI回复失败", slog.String("error", saveErr.Error()))
-				_ = l.svcCtx.Realtime.Publish(ctx, topic, types.NewErrorEvent("保存回复失败："+saveErr.Error()))
-				return
-			}
-			assistantMessageID = assistantMsg.ID.String()
-			// 如果没有发送过 token，则在这里发送最终 answer 作为 token 事件，确保客户端能收到完整回复
 			if answer != "" && !sentToken {
 				_ = l.svcCtx.Realtime.Publish(ctx, topic, types.NewTokenEvent(answer))
 			}
 		case *flow.ErrorMessage:
-			partial := strings.TrimSpace(msg.Partial)
-			if partial != "" {
-				parts = finalizePartsWithAnswer(parts, partial)
-				if _, saveErr := l.svcCtx.MessageRepo.Create(ctx, userID, &models.Message{
-					ConversationID: conversationID,
-					Role:           string(llm.AssistantRole),
-					Content:        partial,
-					MetaData:       buildAssistantMeta(parts, true),
-				}); saveErr != nil {
-					l.log.WarnContext(ctx, "保存部分回复失败", slog.String("error", saveErr.Error()))
-				}
-			} else if len(parts) > 0 {
-				// 无 partial 文本但已有片段时仍落库，便于历史还原中断前状态
-				if _, saveErr := l.svcCtx.MessageRepo.Create(ctx, userID, &models.Message{
-					ConversationID: conversationID,
-					Role:           string(llm.AssistantRole),
-					Content:        "",
-					MetaData:       buildAssistantMeta(parts, true),
-				}); saveErr != nil {
-					l.log.WarnContext(ctx, "保存中断元数据失败", slog.String("error", saveErr.Error()))
-				}
-			}
 			messageText := strings.TrimSpace(msg.Message)
 			if messageText == "" && msg.Err != nil {
 				messageText = msg.Err.Error()
 			}
-			l.log.WarnContext(ctx, "后台生成回复失败", slog.String("error", messageText))
+			reportedError = true
 			_ = l.svcCtx.Realtime.Publish(ctx, topic, types.NewErrorEvent("生成失败："+messageText))
-			return
 		case *flow.ToolCallMessage:
 			if msg != nil {
-				parts = appendToolCallPart(parts, msg.Tool, msg.Input, msg.Iteration, msg.ToolCallID)
 				_ = l.svcCtx.Realtime.Publish(ctx, topic, types.NewToolCallEvent(msg.Tool, cloneFlowInput(msg.Input), msg.Iteration, msg.ToolCallID))
 			}
 		case *flow.ToolResultMessage:
 			if msg != nil {
-				obs := truncateObservation(msg.Observation)
-				parts = appendToolResultPart(parts, msg.Tool, msg.Input, obs, msg.Error, msg.Iteration, msg.ToolCallID)
 				_ = l.svcCtx.Realtime.Publish(ctx, topic, types.NewToolResultEvent(msg.Tool, cloneFlowInput(msg.Input), msg.Observation, msg.Error, msg.Iteration, msg.ToolCallID))
 			}
 		case *flow.PartialMessage:
 			if msg != nil && msg.Text != "" {
-				// Partial 入 parts（相邻 text merge），供历史还原交错正文
-				parts = appendTextPart(parts, msg.Text)
 				sentToken = true
 				_ = l.svcCtx.Realtime.Publish(ctx, topic, types.NewTokenEvent(msg.Text))
 			}
 		case *flow.ThinkMessage:
 			if msg != nil {
-				// think 为瞬时 UI 状态，不写入 message parts
 				_ = l.svcCtx.Realtime.Publish(ctx, topic, types.NewThinkEvent(msg.Status, msg.Iteration))
 			}
-		case *flow.DoneMessage:
-			_ = l.svcCtx.Realtime.Publish(ctx, topic, types.NewDoneEvent(assistantMessageID))
-		default:
-			l.log.WarnContext(ctx, "忽略未知 Flow 消息")
 		}
+	})
+	if err != nil {
+		l.log.WarnContext(ctx, "后台生成回复失败", slog.String("error", err.Error()))
+		if !reportedError {
+			_ = l.svcCtx.Realtime.Publish(ctx, topic, types.NewErrorEvent("生成失败："+err.Error()))
+		}
+		return
 	}
+	assistantMessageID := ""
+	if result.AssistantMessage != nil {
+		assistantMessageID = result.AssistantMessage.ID.String()
+	}
+	_ = l.svcCtx.Realtime.Publish(ctx, topic, types.NewDoneEvent(assistantMessageID))
 	// TODO: 后续接入记忆萃取、图片入库、情绪分析等副作用，失败不能影响主回复。
 }
 
@@ -313,29 +246,11 @@ func (l *ChatStreamLogic) chatActivePersona(ctx context.Context, userID uuid.UUI
 // resolveChatRuntimeConfig 归一化聊天运行参数，并在 logic 层提供业务默认值兜底。
 // 有人格 soul/identity 时注入 # Soul / # Identity；否则注入默认 Cove 身份。
 func resolveChatRuntimeConfig(input *request.ChatStreamRequest, agentConfig *models.AgentConfig, persona *models.AgentPersona) chatRuntimeConfig {
-	config := chatRuntimeConfig{
-		EnableKnowledge: false,
-		Temperature:     defaultChatTemperature,
-		ContextPolicy:   mapper.AgentConfigToContextPolicy(agentConfig),
+	var enableKnowledge *bool
+	if input != nil {
+		enableKnowledge = input.EnableKnowledge
 	}
-	if agentConfig != nil && agentConfig.Temperature > 0 {
-		config.Temperature = agentConfig.Temperature
-	}
-	agentPrompt := ""
-	if agentConfig != nil {
-		config.EnableKnowledge = agentConfig.EnableKnowledge
-		agentPrompt = strings.TrimSpace(agentConfig.SystemPrompt)
-	}
-	soul, identity := "", ""
-	if persona != nil {
-		soul = persona.Soul
-		identity = persona.Identity
-	}
-	config.SystemPrompt = buildChatSystemPrompt(soul, identity, agentPrompt)
-	if input != nil && input.EnableKnowledge != nil {
-		config.EnableKnowledge = *input.EnableKnowledge
-	}
-	return config
+	return resolveTurnRuntimeConfig(enableKnowledge, agentConfig, persona)
 }
 
 // ensureConversation 确保会话存在

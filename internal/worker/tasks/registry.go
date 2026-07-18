@@ -24,6 +24,10 @@ func (r *Registry) Register(router queue.Router) {
 			router.Handle(taskName, queue.HandlerFunc(NewParseDocumentTask(r.svcCtx).Handle))
 		case types.TaskParseImage:
 			router.Handle(taskName, queue.HandlerFunc(NewParseImageTask(r.svcCtx).Handle))
+		case types.TaskGatewayTurn:
+			router.Handle(taskName, queue.HandlerFunc(NewGatewayTurnTask(r.svcCtx).Handle))
+		case types.TaskGatewayDeliver:
+			router.Handle(taskName, queue.HandlerFunc(NewGatewayDeliverTask(r.svcCtx).Handle))
 		default:
 			router.Handle(taskName, queue.HandlerFunc(NewPlaceholderTask().Handle))
 		}

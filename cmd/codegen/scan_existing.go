@@ -58,7 +58,13 @@ func scanLogics(root string) (map[string]string, error) {
 			if !ok || fn.Recv == nil {
 				continue
 			}
-			recv := strings.TrimSuffix(receiverTypeName(fn.Recv), "Logic")
+			receiver := receiverTypeName(fn.Recv)
+			// 集中式 Service 用例以方法名对应路由操作，避免生成同义的空 Logic 文件。
+			if receiver == "Service" {
+				out[logicKey(file.Name.Name, fn.Name.Name)] = path
+				continue
+			}
+			recv := strings.TrimSuffix(receiver, "Logic")
 			if recv == "" {
 				continue
 			}

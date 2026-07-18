@@ -48,6 +48,7 @@ func main() {
 			string(types.QueueMemory):   3,
 			string(types.QueueResearch): 1,
 			string(types.QueueBeat):     1,
+			string(types.QueueGateway):  3,
 		}},
 	)
 	if err := server.Run(mux); err != nil {

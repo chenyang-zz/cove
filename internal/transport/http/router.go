@@ -52,6 +52,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	tag := handler.NewTagHandler(deps.Svc)
 	skill := handler.NewSkillHandler(deps.Svc)
 	toolConfig := handler.NewToolConfigHandler(deps.Svc)
+	gateway := handler.NewGatewayHandler(deps.Svc)
 
 	authMiddleware := middleware.Auth(deps.Svc.TokenIssuer)
 
@@ -70,6 +71,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	routes.RegisterTagRoutes(api, tag, authMiddleware)
 	routes.RegisterSkillRoutes(api, skill, authMiddleware)
 	routes.RegisterToolConfigRoutes(api, toolConfig, authMiddleware)
+	routes.RegisterGatewayRoutes(api, gateway, authMiddleware)
 	if deps.EnableDebugPanicRoute {
 		routes.RegisterDebugRoutes(api)
 	}

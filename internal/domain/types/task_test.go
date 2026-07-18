@@ -16,6 +16,8 @@ func TestTaskNamesAreStable(t *testing.T) {
 		types.TaskMemoryExtract,
 		types.TaskMemoryConsolidate,
 		types.TaskResearchRun,
+		types.TaskGatewayTurn,
+		types.TaskGatewayDeliver,
 	}
 	if len(names) != len(want) {
 		t.Fatalf("names = %#v", names)
@@ -24,6 +26,25 @@ func TestTaskNamesAreStable(t *testing.T) {
 		if names[i] != want[i] {
 			t.Fatalf("names[%d] = %q, want %q", i, names[i], want[i])
 		}
+	}
+}
+
+// 验证网关任务使用独立队列并拒绝空收件箱 ID。
+func TestNewGatewayTurnTaskBuildsTypedPayload(t *testing.T) {
+	inboxID := uuid.New()
+	task, err := types.NewGatewayTurnTask(inboxID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.Queue != types.QueueGateway || task.Name != types.TaskGatewayTurn {
+		t.Fatalf("unexpected task: %#v", task)
+	}
+	payload, ok := task.Payload.(*types.GatewayTurnPayload)
+	if !ok || payload.InboxEventID != inboxID {
+		t.Fatalf("unexpected payload: %#v", task.Payload)
+	}
+	if _, err := types.NewGatewayTurnTask(uuid.Nil); err == nil {
+		t.Fatal("expected nil inbox id error")
 	}
 }
 

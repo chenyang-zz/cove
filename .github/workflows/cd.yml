@@ -91,6 +91,9 @@ jobs:
           - service: worker
             image: cove-worker
             target: worker
+          - service: gateway
+            image: cove-gateway
+            target: gateway
     steps:
       - uses: actions/checkout@v4
 

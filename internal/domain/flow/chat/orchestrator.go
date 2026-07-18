@@ -39,7 +39,14 @@ type Input struct {
 	Temperature          float64
 	SystemPrompt         string
 	ContextPolicy        *corecontext.Policy
+	ToolPolicy           string
 }
+
+const (
+	ToolPolicyInherit = "inherit"
+	ToolPolicySafe    = "safe"
+	ToolPolicyNone    = "none"
+)
 
 const (
 	// defaultMCPAssembleBudget 是单轮对话中 MCP 工具发现的墙钟上限。
@@ -116,7 +123,7 @@ func (o *Orchestrator) generate(ctx context.Context, input Input, events chan<- 
 	if err != nil {
 		return generationResult{}, err
 	}
-	registry, closeTools, err := o.toolRegistry(runCtx, input.UserID, kbIDs)
+	registry, closeTools, err := o.toolRegistryWithPolicy(runCtx, input.UserID, kbIDs, input.ToolPolicy)
 	if err != nil {
 		return generationResult{}, err
 	}
@@ -233,7 +240,15 @@ func contextEntryMessages(entries []*corecontext.Entry) []*llm.Message {
 // 2. 知识库工具：仅在用户启用知识库时加载，默认启用，除非用户显式禁用。
 // 3. MCP 工具：仅在用户启用 MCP 服务时加载，默认启用，除非用户显式禁用。
 func (o *Orchestrator) toolRegistry(ctx context.Context, userID uuid.UUID, kbIDs []uuid.UUID) (*coretool.Registry, func() error, error) {
+	return o.toolRegistryWithPolicy(ctx, userID, kbIDs, ToolPolicyInherit)
+}
+
+func (o *Orchestrator) toolRegistryWithPolicy(ctx context.Context, userID uuid.UUID, kbIDs []uuid.UUID, policy string) (*coretool.Registry, func() error, error) {
 	if o.svcCtx == nil {
+		return coretool.NewRegistry(), nil, nil
+	}
+	policy = normalizeToolPolicy(policy)
+	if policy == ToolPolicyNone {
 		return coretool.NewRegistry(), nil, nil
 	}
 	catalog, err := domaintools.NewCatalog(o.svcCtx)
@@ -244,7 +259,14 @@ func (o *Orchestrator) toolRegistry(ctx context.Context, userID uuid.UUID, kbIDs
 	if len(kbIDs) > 0 {
 		setNames = append(setNames, domaintools.ToolSetKnowledge)
 	}
-	registry, err := catalog.BuildRegistry(ctx, coretool.Selection{SetNames: setNames})
+	selection := coretool.Selection{SetNames: setNames}
+	if policy == ToolPolicySafe {
+		selection.ToolNames = []string{domaintools.ToolCurrentTime}
+		if len(kbIDs) > 0 {
+			selection.ToolNames = append(selection.ToolNames, domaintools.ToolKnowledgeSearch)
+		}
+	}
+	registry, err := catalog.BuildRegistry(ctx, selection)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -279,6 +301,9 @@ func (o *Orchestrator) toolRegistry(ctx context.Context, userID uuid.UUID, kbIDs
 		if err := filtered.Register(ctx, tool); err != nil {
 			return nil, nil, err
 		}
+	}
+	if policy == ToolPolicySafe {
+		return filtered, nil, nil
 	}
 
 	if o.svcCtx.MCPServerRepo == nil || o.svcCtx.MCPToolService == nil {
@@ -384,6 +409,17 @@ func (o *Orchestrator) toolRegistry(ctx context.Context, userID uuid.UUID, kbIDs
 		return filtered, nil, nil
 	}
 	return filtered, closeAll, nil
+}
+
+func normalizeToolPolicy(policy string) string {
+	switch strings.ToLower(strings.TrimSpace(policy)) {
+	case ToolPolicySafe:
+		return ToolPolicySafe
+	case ToolPolicyNone:
+		return ToolPolicyNone
+	default:
+		return ToolPolicyInherit
+	}
 }
 
 func enabledByToolConfig(rows []*models.ToolConfig, toolKey string) (bool, bool) {

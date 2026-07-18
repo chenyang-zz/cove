@@ -16,6 +16,8 @@ const (
 	TaskMemoryExtract     TaskName = "memory:extract"
 	TaskMemoryConsolidate TaskName = "memory:consolidate"
 	TaskResearchRun       TaskName = "research:run"
+	TaskGatewayTurn       TaskName = "gateway:turn"
+	TaskGatewayDeliver    TaskName = "gateway:deliver"
 )
 
 const (
@@ -24,6 +26,7 @@ const (
 	QueueMemory   QueueName = "memory"
 	QueueResearch QueueName = "research"
 	QueueBeat     QueueName = "beat"
+	QueueGateway  QueueName = "gateway"
 )
 
 type Task struct {
@@ -42,6 +45,16 @@ type ParseImagePayload struct {
 	ImageID uuid.UUID `json:"image_id"`
 }
 
+// GatewayTurnPayload 标识一个已通过策略门控的入站事件。
+type GatewayTurnPayload struct {
+	InboxEventID uuid.UUID `json:"inbox_event_id"`
+}
+
+// GatewayDeliverPayload 标识一个待可靠投递的发件箱消息。
+type GatewayDeliverPayload struct {
+	OutboxMessageID uuid.UUID `json:"outbox_message_id"`
+}
+
 func TaskNames() []TaskName {
 	return []TaskName{
 		TaskParseDocument,
@@ -49,7 +62,25 @@ func TaskNames() []TaskName {
 		TaskMemoryExtract,
 		TaskMemoryConsolidate,
 		TaskResearchRun,
+		TaskGatewayTurn,
+		TaskGatewayDeliver,
 	}
+}
+
+// NewGatewayTurnTask 创建网关回合任务。
+func NewGatewayTurnTask(inboxEventID uuid.UUID) (*Task, error) {
+	if inboxEventID == uuid.Nil {
+		return nil, fmt.Errorf("inbox_event_id is required")
+	}
+	return &Task{Name: TaskGatewayTurn, Queue: QueueGateway, Payload: &GatewayTurnPayload{InboxEventID: inboxEventID}}, nil
+}
+
+// NewGatewayDeliverTask 创建网关发件箱投递任务。
+func NewGatewayDeliverTask(outboxMessageID uuid.UUID) (*Task, error) {
+	if outboxMessageID == uuid.Nil {
+		return nil, fmt.Errorf("outbox_message_id is required")
+	}
+	return &Task{Name: TaskGatewayDeliver, Queue: QueueGateway, Payload: &GatewayDeliverPayload{OutboxMessageID: outboxMessageID}}, nil
 }
 
 func NewParseDocumentTask(userID uuid.UUID, documentID uuid.UUID) (*Task, error) {

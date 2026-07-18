@@ -34,6 +34,10 @@ func EncodeTask(task *types.Task) (*asynq.Task, error) {
 			return nil, err
 		}
 		return asynq.NewTask(string(task.Name), data), nil
+	case types.TaskGatewayTurn:
+		return encodeJSONTask(task.Name, task.Payload)
+	case types.TaskGatewayDeliver:
+		return encodeJSONTask(task.Name, task.Payload)
 	case types.TaskMemoryExtract, types.TaskMemoryConsolidate, types.TaskResearchRun:
 		return asynq.NewTask(string(task.Name), nil), nil
 	default:
@@ -73,6 +77,24 @@ func DecodeTask(task *asynq.Task) (*types.Task, error) {
 			Queue:   types.QueueParse,
 			Payload: &payload,
 		}, nil
+	case types.TaskGatewayTurn:
+		var payload types.GatewayTurnPayload
+		if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+			return nil, err
+		}
+		if payload.InboxEventID == uuid.Nil {
+			return nil, fmt.Errorf("gateway turn inbox_event_id is required")
+		}
+		return &types.Task{Name: name, Queue: types.QueueGateway, Payload: &payload}, nil
+	case types.TaskGatewayDeliver:
+		var payload types.GatewayDeliverPayload
+		if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+			return nil, err
+		}
+		if payload.OutboxMessageID == uuid.Nil {
+			return nil, fmt.Errorf("gateway deliver outbox_message_id is required")
+		}
+		return &types.Task{Name: name, Queue: types.QueueGateway, Payload: &payload}, nil
 	case types.TaskMemoryExtract:
 		return &types.Task{Name: name, Queue: types.QueueMemory}, nil
 	case types.TaskMemoryConsolidate:
@@ -82,6 +104,14 @@ func DecodeTask(task *asynq.Task) (*types.Task, error) {
 	default:
 		return nil, fmt.Errorf("unknown task name: %s", name)
 	}
+}
+
+func encodeJSONTask(name types.TaskName, payload any) (*asynq.Task, error) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	return asynq.NewTask(string(name), data), nil
 }
 
 func parseDocumentPayload(payload any) (*types.ParseDocumentPayload, error) {

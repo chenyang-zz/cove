@@ -85,3 +85,33 @@ func (t *ToolConfig) BeforeCreate(tx *gorm.DB) error {
 	ensureUUID(&t.ID)
 	return nil
 }
+
+// BeforeCreate 为新渠道账号分配 UUID。
+func (c *ChannelAccount) BeforeCreate(tx *gorm.DB) error {
+	ensureUUID(&c.ID)
+	return nil
+}
+
+// BeforeCreate 为新渠道身份分配 UUID。
+func (c *ChannelIdentity) BeforeCreate(tx *gorm.DB) error {
+	ensureUUID(&c.ID)
+	return nil
+}
+
+// BeforeCreate 为新渠道绑定分配 UUID。
+func (c *ChannelBinding) BeforeCreate(tx *gorm.DB) error {
+	ensureUUID(&c.ID)
+	return nil
+}
+
+// BeforeCreate 为新渠道入站事件分配 UUID。
+func (c *ChannelInboxEvent) BeforeCreate(tx *gorm.DB) error {
+	ensureUUID(&c.ID)
+	return nil
+}
+
+// BeforeCreate 为新渠道出站消息分配 UUID。
+func (c *ChannelOutboxMessage) BeforeCreate(tx *gorm.DB) error {
+	ensureUUID(&c.ID)
+	return nil
+}

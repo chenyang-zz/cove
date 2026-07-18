@@ -3,6 +3,7 @@ package migration
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/boxify/api-go/internal/models"
@@ -145,5 +146,67 @@ func TestRunnerIntegrationWhenPostgresEnvIsConfigured(t *testing.T) {
 	}
 	if !toolConfigsExists {
 		t.Fatal("tool_configs table does not exist")
+	}
+
+	// 验证租户组合键先建立唯一索引，再由网关子表的组合外键引用。
+	for _, index := range []struct {
+		table string
+		name  string
+	}{
+		{table: "channel_accounts", name: "uq_channel_accounts_id_user_id"},
+		{table: "channel_inbox_events", name: "uq_channel_inbox_events_scope"},
+	} {
+		var exists bool
+		err := db.QueryRowContext(context.Background(), `
+			SELECT EXISTS (
+				SELECT 1 FROM pg_indexes
+				WHERE tablename = $1 AND indexname = $2 AND indexdef ILIKE '%UNIQUE%'
+			)`, index.table, index.name).Scan(&exists)
+		if err != nil {
+			t.Fatalf("query tenant index %s: %v", index.name, err)
+		}
+		if !exists {
+			t.Fatalf("tenant unique index %s does not exist", index.name)
+		}
+	}
+
+	for _, constraint := range []struct {
+		name       string
+		wantFields string
+		wantTarget string
+	}{
+		{
+			name:       "fk_channel_bindings_account_tenant",
+			wantFields: "FOREIGN KEY (account_id, user_id)",
+			wantTarget: "REFERENCES channel_accounts(id, user_id)",
+		},
+		{
+			name:       "fk_channel_inbox_events_account_tenant",
+			wantFields: "FOREIGN KEY (account_id, user_id)",
+			wantTarget: "REFERENCES channel_accounts(id, user_id)",
+		},
+		{
+			name:       "fk_channel_outbox_messages_account_tenant",
+			wantFields: "FOREIGN KEY (account_id, user_id)",
+			wantTarget: "REFERENCES channel_accounts(id, user_id)",
+		},
+		{
+			name:       "fk_channel_outbox_messages_inbox_scope",
+			wantFields: "FOREIGN KEY (inbox_event_id, account_id, user_id)",
+			wantTarget: "REFERENCES channel_inbox_events(id, account_id, user_id)",
+		},
+	} {
+		var definition string
+		err := db.QueryRowContext(context.Background(), `
+			SELECT pg_get_constraintdef(oid)
+			FROM pg_constraint
+			WHERE conname = $1
+		`, constraint.name).Scan(&definition)
+		if err != nil {
+			t.Fatalf("query tenant constraint %s: %v", constraint.name, err)
+		}
+		if !strings.Contains(definition, constraint.wantFields) || !strings.Contains(definition, constraint.wantTarget) || !strings.Contains(definition, "ON DELETE CASCADE") {
+			t.Fatalf("tenant constraint %s = %q, want %q -> %q with cascade", constraint.name, definition, constraint.wantFields, constraint.wantTarget)
+		}
 	}
 }

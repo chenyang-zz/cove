@@ -37,6 +37,7 @@
 - **Agent 编排** — ReAct 双路径（function calling / 文本 ReAct），prompt 模板化渲染，工具调用跨供应商归一化
 - **记忆** — 长期记忆的提取、合并与召回
 - **MCP 集成** — 通过 Model Context Protocol 连接外部工具
+- **多软件网关** — Telegram、飞书与双向 HMAC Webhook，共用对话、权限与可靠投递能力
 - **实时推送** — 基于 Redis 的事件流
 - **文档处理** — 多格式解析：TXT、Markdown、HTML、DOCX、PDF
 - **内容分类** — LLM 驱动的自动标签，支持优雅降级
@@ -95,6 +96,7 @@ make migration
 ```bash
 make api       # API 服务 :8000
 make worker    # 后台 worker（另开终端）
+make gateway   # 可选：消息网关 :8010，需先在配置中启用
 ```
 
 ## 架构
@@ -254,6 +256,17 @@ memory:
 
 agent:
   max_personas: 200
+
+gateway:
+  enabled: false             # 完成迁移并启动 API/Worker 后再开启
+  host: 0.0.0.0
+  port: 8010
+  reconcile_interval: 30s
+  lease_ttl: 45s
+  webhook_signing_window: 5m
+  callback_timeout: 10s
+  max_request_bytes: 1048576
+  max_media_bytes: 20971520
 ```
 
 完整配置项与默认值见 [`configs/config.yml.example`](configs/config.yml.example)。
@@ -285,6 +298,7 @@ Cove 内置代码生成器（`cmd/codegen/`），扫描 Go 注解自动生成：
 | `/api/knowledge-bases` | 知识库管理 |
 | `/api/agents` | Agent 配置 |
 | `/api/mcp-servers` | MCP 服务集成 |
+| `/api/gateway` | 渠道账号、配对与路由绑定管理 |
 
 已认证路由受 JWT 中间件保护。
 
@@ -299,6 +313,8 @@ Cove 内置代码生成器（`cmd/codegen/`），扫描 Go 注解自动生成：
 | `memory:extract` | 记忆提取 |
 | `memory:consolidate` | 每日记忆合并 |
 | `research:run` | 研究任务执行 |
+| `gateway:turn` | 串行执行外部渠道对话 |
+| `gateway:deliver` | 可靠投递渠道最终回复 |
 
 ## 测试
 
@@ -319,6 +335,7 @@ go test ./internal/agent/... # Agent 编排
 ├── cmd/                # 入口
 │   ├── api/            # HTTP 服务
 │   ├── worker/         # 后台处理器
+│   ├── gateway/        # 独立消息网关
 │   ├── scheduler/      # Cron 调度器
 │   ├── migration/      # 数据库迁移
 │   └── codegen/        # 代码生成工具
@@ -401,6 +418,7 @@ curl -X POST http://localhost:8000/api/documents \
 |---|---|
 | [架构文档](docs/architecture.md) | 技术栈、分层架构、RAG 数据流、启动路径 |
 | [OpenAPI 规范](docs/openapi.json) | 自动生成的 API 参考（OpenAPI 3.0.3） |
+| [多软件网关](docs/gateway.md) | Provider、配对、Webhook 协议与启用流程 |
 | [代码生成器](cmd/codegen/README.md) | codegen 工具完整使用指南 |
 | [贡献指南](CONTRIBUTING.md) | 分支命名、提交规范、PR 清单 |
 | [更新日志](CHANGELOG.md) | 版本变更记录 |

@@ -80,3 +80,15 @@ mcp:
   fail_cooldown: 30s
   assemble_budget: 8s
   assemble_concurrency: 4
+
+# 独立消息网关默认关闭。完成迁移并启动 API/Worker 后再启用。
+gateway:
+  enabled: false
+  host: 0.0.0.0
+  port: 8010
+  reconcile_interval: 30s
+  lease_ttl: 45s
+  webhook_signing_window: 5m
+  callback_timeout: 10s
+  max_request_bytes: 1048576
+  max_media_bytes: 20971520

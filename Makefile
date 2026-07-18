@@ -1,10 +1,13 @@
-.PHONY: api worker migration gen-route gen-repository gen-docs gen-prompt docs install-hooks
+.PHONY: api worker gateway migration gen-route gen-repository gen-docs gen-prompt docs install-hooks
 
 api:
 	go run ./cmd/api
 
 worker:
 	go run ./cmd/worker
+
+gateway:
+	go run ./cmd/gateway
 
 migration:
 	go run ./cmd/migration

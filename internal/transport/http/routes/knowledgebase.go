@@ -50,4 +50,10 @@ func RegisterKnowledgeBaseRoutes(api *gin.RouterGroup, knowledgebase handler.Kno
 	// @description 启用或禁用知识库聊天
 	// @input request.EnabledChatRequest
 	knowledgebaseRoutes.POST("/:k_id/chat-enabled", knowledgebase.EnabledChat)
+
+	// @auth(user_id)
+	// @description 设置默认知识库
+	// @input request.UriKnowledgeBaseIDRequest
+	// @output response.KnowledgeBaseResponse
+	knowledgebaseRoutes.POST("/:k_id/default", knowledgebase.SetDefaultKnowledgeBase)
 }

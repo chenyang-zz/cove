@@ -27,6 +27,7 @@ type Config struct {
 	Agent         AgentConfig         `yaml:"agent"`
 	Skill         SkillConfig         `yaml:"skill"`
 	MCP           MCPConfig           `yaml:"mcp"`
+	Gateway       GatewayConfig       `yaml:"gateway"`
 }
 
 type AppConfig struct {
@@ -136,6 +137,19 @@ type MCPConfig struct {
 	AssembleConcurrency int `yaml:"assemble_concurrency"`
 }
 
+// GatewayConfig 控制独立消息网关的数据面、租约和安全边界。
+type GatewayConfig struct {
+	Enabled              bool   `yaml:"enabled"`
+	Host                 string `yaml:"host"`
+	Port                 int    `yaml:"port"`
+	ReconcileInterval    string `yaml:"reconcile_interval"`     // ReconcileInterval 是网关的租约刷新间隔（如 "30s"）。
+	LeaseTTL             string `yaml:"lease_ttl"`              // LeaseTTL 是网关的租约过期时间（如 "45s"）。
+	WebhookSigningWindow string `yaml:"webhook_signing_window"` // WebhookSigningWindow 是网关验证 webhook 签名的时间窗口（如 "5m"）。
+	CallbackTimeout      string `yaml:"callback_timeout"`       // CallbackTimeout 是网关回调请求的超时（如 "10s"）。
+	MaxRequestBytes      int64  `yaml:"max_request_bytes"`      // MaxRequestBytes 是网关请求体的最大字节数。
+	MaxMediaBytes        int64  `yaml:"max_media_bytes"`        // MaxMediaBytes 是网关媒体文件的最大字节数。
+}
+
 func Load() Config {
 	path := os.Getenv("CONFIG_PATH")
 	if path == "" {
@@ -176,6 +190,11 @@ func (c Config) HTTPAddr() string {
 	return fmt.Sprintf("%s:%d", c.HTTP.Host, c.HTTP.Port)
 }
 
+// GatewayAddr 返回独立网关监听地址。
+func (c Config) GatewayAddr() string {
+	return fmt.Sprintf("%s:%d", c.Gateway.Host, c.Gateway.Port)
+}
+
 func defaultConfig() Config {
 	return Config{
 		App:           AppConfig{Env: "development"},
@@ -210,6 +229,17 @@ func defaultConfig() Config {
 			FailCooldown:        "30s",
 			AssembleBudget:      "8s",
 			AssembleConcurrency: 4,
+		},
+		Gateway: GatewayConfig{
+			Enabled:              false,
+			Host:                 "0.0.0.0",
+			Port:                 8010,
+			ReconcileInterval:    "30s",
+			LeaseTTL:             "45s",
+			WebhookSigningWindow: "5m",
+			CallbackTimeout:      "10s",
+			MaxRequestBytes:      1 << 20,
+			MaxMediaBytes:        20 << 20,
 		},
 	}
 }
@@ -258,6 +288,15 @@ func applyEnv(cfg *Config) {
 	cfg.MCP.FailCooldown = env("MCP_FAIL_COOLDOWN", cfg.MCP.FailCooldown)
 	cfg.MCP.AssembleBudget = env("MCP_ASSEMBLE_BUDGET", cfg.MCP.AssembleBudget)
 	cfg.MCP.AssembleConcurrency = envInt("MCP_ASSEMBLE_CONCURRENCY", cfg.MCP.AssembleConcurrency)
+	cfg.Gateway.Enabled = envBool("GATEWAY_ENABLED", cfg.Gateway.Enabled)
+	cfg.Gateway.Host = env("GATEWAY_HOST", cfg.Gateway.Host)
+	cfg.Gateway.Port = envInt("GATEWAY_PORT", cfg.Gateway.Port)
+	cfg.Gateway.ReconcileInterval = env("GATEWAY_RECONCILE_INTERVAL", cfg.Gateway.ReconcileInterval)
+	cfg.Gateway.LeaseTTL = env("GATEWAY_LEASE_TTL", cfg.Gateway.LeaseTTL)
+	cfg.Gateway.WebhookSigningWindow = env("GATEWAY_WEBHOOK_SIGNING_WINDOW", cfg.Gateway.WebhookSigningWindow)
+	cfg.Gateway.CallbackTimeout = env("GATEWAY_CALLBACK_TIMEOUT", cfg.Gateway.CallbackTimeout)
+	cfg.Gateway.MaxRequestBytes = envInt64("GATEWAY_MAX_REQUEST_BYTES", cfg.Gateway.MaxRequestBytes)
+	cfg.Gateway.MaxMediaBytes = envInt64("GATEWAY_MAX_MEDIA_BYTES", cfg.Gateway.MaxMediaBytes)
 }
 
 func env(key, fallback string) string {
@@ -274,6 +313,18 @@ func envInt(key string, fallback int) int {
 		return fallback
 	}
 	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func envInt64(key string, fallback int64) int64 {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
 		return fallback
 	}

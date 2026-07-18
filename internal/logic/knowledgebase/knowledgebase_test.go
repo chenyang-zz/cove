@@ -171,6 +171,19 @@ func (r *fakeKnowledgeBaseRepository) FindDefault(ctx context.Context, userID uu
 	return nil, xerr.NotFound("默认知识库不存在")
 }
 
+func (r *fakeKnowledgeBaseRepository) SetDefault(ctx context.Context, userID uuid.UUID, knowledgeBaseID uuid.UUID) (*models.KnowledgeBase, error) {
+	target, err := r.FindByID(ctx, userID, knowledgeBaseID)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range r.rows {
+		if row.UserID == userID {
+			row.IsDefault = row.ID == knowledgeBaseID
+		}
+	}
+	return target, nil
+}
+
 func (r *fakeKnowledgeBaseRepository) Update(ctx context.Context, userID uuid.UUID, row *models.KnowledgeBase) (*models.KnowledgeBase, error) {
 	r.rows[row.ID] = row
 	return row, nil
@@ -463,5 +476,38 @@ func TestEnabledChatAcceptsFalse(t *testing.T) {
 	}
 	if out == nil || out.ID != row.ID || out.Name != "资料库" || out.ChatEnabled || out.DocCount != 1 || out.ImageCount != 2 {
 		t.Fatalf("response = %+v, want updated knowledge base with chat disabled", out)
+	}
+}
+
+// TestSetDefaultKnowledgeBaseSwitchesUniqueDefault 验证切换默认知识库只影响当前用户，并返回内容计数。
+func TestSetDefaultKnowledgeBaseSwitchesUniqueDefault(t *testing.T) {
+	ctx := context.Background()
+	userID := uuid.New()
+	otherUserID := uuid.New()
+	oldDefault := &models.KnowledgeBase{ID: uuid.New(), UserID: userID, Name: "旧默认", IsDefault: true}
+	target := &models.KnowledgeBase{ID: uuid.New(), UserID: userID, Name: "新默认"}
+	otherDefault := &models.KnowledgeBase{ID: uuid.New(), UserID: otherUserID, Name: "其他用户默认", IsDefault: true}
+	repo := newFakeKnowledgeBaseRepository(oldDefault, target, otherDefault)
+	docRepo := &fakeKnowledgeBaseDocumentRepository{rows: []*models.Document{
+		{ID: uuid.New(), UserID: userID, KBID: &target.ID},
+	}}
+	imageRepo := &fakeKnowledgeBaseImageRepository{rows: []*models.Image{
+		{ID: uuid.New(), UserID: userID, KBID: &target.ID},
+		{ID: uuid.New(), UserID: userID, KBID: &target.ID},
+	}}
+
+	out, err := NewSetDefaultKnowledgeBaseLogic(ctx, &svc.ServiceContext{
+		KnowledgeBaseRepo: repo,
+		DocumentRepo:      docRepo,
+		ImageRepo:         imageRepo,
+	}).SetDefaultKnowledgeBase(userID, &request.UriKnowledgeBaseIDRequest{KID: target.ID.String()})
+	if err != nil {
+		t.Fatalf("SetDefaultKnowledgeBase error = %v", err)
+	}
+	if oldDefault.IsDefault || !target.IsDefault || !otherDefault.IsDefault {
+		t.Fatalf("default flags old=%v target=%v other=%v, want false/true/true", oldDefault.IsDefault, target.IsDefault, otherDefault.IsDefault)
+	}
+	if out == nil || out.ID != target.ID || !out.IsDefault || out.DocCount != 1 || out.ImageCount != 2 {
+		t.Fatalf("response = %+v, want new default with 1 document and 2 images", out)
 	}
 }

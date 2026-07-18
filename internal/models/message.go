@@ -35,10 +35,22 @@ type MessagePart struct {
 }
 
 type MessageMetaData struct {
-	ImageKeys   []string      `json:"image_keys"`
-	SenderName  string        `json:"sender_name"`
-	Parts       []MessagePart `json:"parts,omitempty"`
-	Interrupted bool          `json:"interrupted,omitempty"`
+	ImageKeys   []string                `json:"image_keys"`
+	SenderName  string                  `json:"sender_name"`
+	Attachments []MessageAttachmentMeta `json:"attachments,omitempty"`
+	Parts       []MessagePart           `json:"parts,omitempty"`
+	Interrupted bool                    `json:"interrupted,omitempty"`
+}
+
+// MessageAttachmentMeta 保存外部渠道附件的安全存储位置和本轮提取结果。
+type MessageAttachmentMeta struct {
+	Kind          string `json:"kind"`
+	FileName      string `json:"file_name,omitempty"`
+	MIMEType      string `json:"mime_type,omitempty"`
+	StorageKey    string `json:"storage_key"`
+	Size          int64  `json:"size"`
+	ExtractedText string `json:"extracted_text,omitempty"`
+	ParseError    string `json:"parse_error,omitempty"`
 }
 
 func (m MessageMetaData) Value() (driver.Value, error) {

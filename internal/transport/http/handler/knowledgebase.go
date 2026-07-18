@@ -137,3 +137,23 @@ func (h KnowledgeBaseHandler) EnabledChat(c *gin.Context) {
 	}
 	response.OK(c, out)
 }
+
+// SetDefaultKnowledgeBase 将指定知识库设置为当前用户的默认知识库。
+func (h KnowledgeBaseHandler) SetDefaultKnowledgeBase(c *gin.Context) {
+	var input request.UriKnowledgeBaseIDRequest
+	if err := c.ShouldBindUri(&input); err != nil {
+		response.FromError(c, xerr.Validation(err))
+		return
+	}
+	userID, err := util.UserIDFromContext(c.Request.Context())
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	out, err := knowledgebaselogic.NewSetDefaultKnowledgeBaseLogic(c.Request.Context(), h.svc).SetDefaultKnowledgeBase(userID, &input)
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	response.OK(c, out)
+}

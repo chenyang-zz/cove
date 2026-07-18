@@ -71,6 +71,38 @@ func TestEncodeDecodeParseImageTaskRoundTrip(t *testing.T) {
 	}
 }
 
+// TestEncodeDecodeGatewayTasksRoundTrip 验证网关回合和投递任务保留稳定 ID 与独立队列。
+func TestEncodeDecodeGatewayTasksRoundTrip(t *testing.T) {
+	tests := []struct {
+		name string
+		make func(uuid.UUID) (*types.Task, error)
+		id   func(*types.Task) uuid.UUID
+	}{
+		{name: "turn", make: types.NewGatewayTurnTask, id: func(task *types.Task) uuid.UUID { return task.Payload.(*types.GatewayTurnPayload).InboxEventID }},
+		{name: "deliver", make: types.NewGatewayDeliverTask, id: func(task *types.Task) uuid.UUID { return task.Payload.(*types.GatewayDeliverPayload).OutboxMessageID }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			wantID := uuid.New()
+			task, err := test.make(wantID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			encoded, err := queueredis.EncodeTask(task)
+			if err != nil {
+				t.Fatal(err)
+			}
+			decoded, err := queueredis.DecodeTask(encoded)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if decoded.Queue != types.QueueGateway || test.id(decoded) != wantID {
+				t.Fatalf("unexpected gateway task: %#v", decoded)
+			}
+		})
+	}
+}
+
 func TestDecodeTaskRejectsInvalidPayload(t *testing.T) {
 	// 验证 Redis/Asynq 解码会拒绝非法 JSON 和未知任务，避免错误任务进入 handler。
 	badJSON := asynq.NewTask(string(types.TaskParseDocument), []byte("{bad json"))

@@ -695,6 +695,19 @@ func (r *testKnowledgeBaseRepository) FindDefault(ctx context.Context, userID uu
 	return nil, xerr.NotFound("默认知识库不存在")
 }
 
+func (r *testKnowledgeBaseRepository) SetDefault(ctx context.Context, userID uuid.UUID, knowledgeBaseID uuid.UUID) (*models.KnowledgeBase, error) {
+	target, err := r.FindByID(ctx, userID, knowledgeBaseID)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range r.rows {
+		if row.UserID == userID {
+			row.IsDefault = row.ID == knowledgeBaseID
+		}
+	}
+	return target, nil
+}
+
 func (r *testKnowledgeBaseRepository) FindByID(ctx context.Context, userID uuid.UUID, knowledgeBaseID uuid.UUID) (*models.KnowledgeBase, error) {
 	for _, row := range r.rows {
 		if row.ID == knowledgeBaseID && row.UserID == userID {
@@ -1668,7 +1681,7 @@ func TestChatStreamSetsSSEHeadersAndEvents(t *testing.T) {
 }
 
 func TestKnowledgeBaseRoutesBindColorAndFalseChatEnabled(t *testing.T) {
-	// 验证知识库 HTTP 路由会绑定 color 字段，允许 chat_enabled=false，并返回更新后的响应。
+	// 验证知识库 HTTP 路由会绑定 color 字段、允许 chat_enabled=false，并支持设置默认知识库。
 	router := newTestRouter(t)
 
 	create := httptest.NewRecorder()
@@ -1713,6 +1726,26 @@ func TestKnowledgeBaseRoutesBindColorAndFalseChatEnabled(t *testing.T) {
 	}
 	if toggleBody.Data.ID != createBody.Data.ID || toggleBody.Data.ChatEnabled {
 		t.Fatalf("toggle body = %+v, want updated knowledge base with chat disabled", toggleBody.Data)
+	}
+
+	setDefault := httptest.NewRecorder()
+	setDefaultReq := httptest.NewRequest(http.MethodPost, "/api/knowledge-base/"+createBody.Data.ID+"/default", nil)
+	setDefaultReq.Header.Set("Authorization", "Bearer dev-token")
+	router.ServeHTTP(setDefault, setDefaultReq)
+	if setDefault.Code != http.StatusOK {
+		t.Fatalf("set default status = %d body=%s", setDefault.Code, setDefault.Body.String())
+	}
+	var setDefaultBody struct {
+		Data struct {
+			ID        string `json:"id"`
+			IsDefault bool   `json:"is_default"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(setDefault.Body.Bytes(), &setDefaultBody); err != nil {
+		t.Fatalf("unmarshal set default body: %v", err)
+	}
+	if setDefaultBody.Data.ID != createBody.Data.ID || !setDefaultBody.Data.IsDefault {
+		t.Fatalf("set default body = %+v, want selected knowledge base as default", setDefaultBody.Data)
 	}
 }
 

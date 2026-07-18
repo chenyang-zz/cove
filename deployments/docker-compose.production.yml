@@ -35,6 +35,28 @@ services:
       retries: 3
       start_period: 10s
 
+  # 网关使用显式 profile，避免发布时自动接管 Telegram/飞书连接。
+  gateway:
+    profiles: ["gateway"]
+    image: ${ALIYUN_REGISTRY:?ALIYUN_REGISTRY is required}/${ALIYUN_NAMESPACE:?ALIYUN_NAMESPACE is required}/cove-gateway:${IMAGE_TAG:?IMAGE_TAG is required}
+    ports:
+      - "8010:8010"
+    environment:
+      APP_ENV: production
+      GATEWAY_ENABLED: "true"
+    volumes:
+      - ../configs/config.production.yml:/app/configs/config.yml:ro
+      - storage_data:/app/storage
+    networks:
+      - boxify
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8010/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
 volumes:
   storage_data:
 
