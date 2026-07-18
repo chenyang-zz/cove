@@ -28,10 +28,12 @@ Current Server real-database coverage:
 - Cross-user conversation and message isolation
 - Profile normalization and persistence, password rejection and rotation, and old/new password login behavior
 
+The 2026-07-18 interactive iOS Simulator run now covers App login, authenticated hydration, SecureStore restoration after process termination, logout, and anonymous state after a second restart. Evidence is linked from [`REAL_DATABASE_COVERAGE.md`](./REAL_DATABASE_COVERAGE.md).
+
 Not exercised through the current App yet:
 
-- Native authentication, session restoration, profile/password editing, chat creation/history, uploads, and RAG
-- Expo Router navigation, SecureStore persistence, keyboard/sheet lifecycle, and native-module behavior
+- Registration UI, forced refresh-token rotation, expired/revoked-session behavior, profile/password editing, chat creation/history, uploads, and RAG
+- Expo Router gestures, keyboard/sheet lifecycle, and native-module behavior outside the recorded authentication flow
 - Worker, scheduler, gateway, Neo4j, and live LLM/MCP provider flows
 - These are explicit future suites rather than hidden mocks in the current smoke scenario.
 - Chat-generated message persistence is still pending because the current backend scenario seeds messages through the owning repository; it does not call a live LLM.
@@ -81,6 +83,19 @@ An App scenario must:
 6. Report the Simulator model, UDID and iOS version; command, bundle ID, Metro state, actions, assertions, evidence paths, first failing layer, and cleanup status.
 
 These are reproducible interactive E2E scenarios. When a flow must become a deterministic CI gate, add it to a project-owned native regression framework; do not describe Computer Use interaction alone as automated CI coverage.
+
+### Isolating the Expo API base URL
+
+An uncommitted `mobile/.env.development.local` may point normal development at another Server. For a disposable local E2E run, do not edit or expose that file. Start Metro from `packages/app/mobile/` with run-owned values and production-mode bundling so Expo statically resolves the intended local API URL:
+
+```bash
+EXPO_NO_DOTENV=1 \
+EXPO_PUBLIC_API_BASE_URL=http://<mac-lan-ip>:<api-port> \
+EXPO_ALLOW_INSECURE_HTTP=true \
+pnpm exec expo start --dev-client --lan --port 8081 --clear --no-dev
+```
+
+Expo SDK 57 development transforms can merge virtual environment values after the shell environment. The `--no-dev` form above was verified in Cove to keep the run-owned URL in the generated bundle. Confirm the resolved URL without printing credentials, then require a request from the Simulator address in the local API logs; a successful host-side request is not sufficient.
 
 Manage only the disposable dependency stack on stable default ports when debugging:
 

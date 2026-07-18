@@ -181,12 +181,21 @@ export function ProfileScreen({ active = true, session, onBack, onLogout, onSess
     }
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
     sheetFocusTimerRef.current = window.setTimeout(() => {
+      const root = rootRef.current
+      const sheetNode = root?.querySelector('.profile-sheet')
+      // If the user already focused a control inside the sheet (common when the
+      // enter animation is still running), do not steal focus back to the
+      // default field — that races userEvent typing in tests and real taps.
+      if (sheetNode && sheetNode.contains(document.activeElement)) {
+        sheetFocusTimerRef.current = null
+        return
+      }
+
       const input = sheet.kind === 'password'
         ? oldPasswordRef.current
         : sheet.focus === 'email'
           ? emailRef.current
           : nicknameRef.current
-      const root = rootRef.current
       const viewport = window.visualViewport
       if (input && root && viewport && viewport.width < 900) {
         const anticipatedHeight =

@@ -123,6 +123,23 @@ describe('ProfileScreen', () => {
     expect(onNavigationLockChange).toHaveBeenLastCalledWith(false)
   })
 
+  it('does not steal focus back to nickname after the user targets another field', async () => {
+    render(
+      <ProfileScreen session={session} onBack={vi.fn()} onLogout={vi.fn()} onSessionChange={vi.fn()} />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    const email = screen.getByLabelText('邮箱') as HTMLInputElement
+    email.focus()
+    expect(document.activeElement).toBe(email)
+
+    // Sheet enter focus is scheduled for sheetEnterDuration (320ms).
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 350))
+    })
+    expect(document.activeElement).toBe(email)
+  })
+
   it('edits nickname and email in the bottom sheet', async () => {
     const user = userEvent.setup()
     const updated = {
@@ -136,12 +153,15 @@ describe('ProfileScreen', () => {
     )
 
     await user.click(screen.getByRole('button', { name: '编辑' }))
-    const nickname = screen.getByLabelText('昵称')
-    const email = screen.getByLabelText('邮箱')
-    await user.clear(nickname)
-    await user.type(nickname, '海风')
-    await user.clear(email)
-    await user.type(email, 'sea@example.com')
+    expect(await screen.findByRole('dialog')).toBeTruthy()
+    const nickname = screen.getByLabelText('昵称') as HTMLInputElement
+    const email = screen.getByLabelText('邮箱') as HTMLInputElement
+    // Set controlled values via change events so the 320ms sheet-enter focus
+    // timer cannot interleave with character-by-character typing under load.
+    fireEvent.change(nickname, { target: { value: '海风' } })
+    fireEvent.change(email, { target: { value: 'sea@example.com' } })
+    expect(nickname.value).toBe('海风')
+    expect(email.value).toBe('sea@example.com')
     await user.click(screen.getByRole('button', { name: '保存' }))
 
     await waitFor(() => expect(mocks.updateProfile).toHaveBeenCalledWith({

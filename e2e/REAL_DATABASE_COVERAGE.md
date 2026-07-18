@@ -6,10 +6,23 @@ The only current frontend product is the Expo App under `packages/app/mobile/`. 
 
 | App flow | Real boundary | Command/evidence | Status | Remaining gap |
 | --- | --- | --- | --- | --- |
-| Authentication and SecureStore session restoration | iOS Simulator → Expo App → API → PostgreSQL | `ios-simulator` skill evidence | Not yet recorded | Register/login, relaunch, refresh rotation, logout, and expired-session behavior. |
+| Authentication and SecureStore session restoration | iOS Simulator → Expo App → API → PostgreSQL | `output/ios-simulator/runs/20260718-auth-session/evidence/` | Partially covered | Add App registration, forced refresh-token rotation, and expired/revoked-session behavior. |
 | Profile and password UI | iOS Simulator → Expo profile screen → API → PostgreSQL | `ios-simulator` skill evidence | Not yet recorded | Edit profile, show wrong-password feedback, change password, logout, and log in with the new password. |
 | Persistent chat and SSE | iOS Simulator → Expo chat/SSE → API → PostgreSQL/Redis | `ios-simulator` skill evidence | Not yet recorded | Create chat, render deterministic stream, relaunch, and restore history. |
 | Navigation and native lifecycle | iOS Simulator → Expo Router/native stack | `ios-simulator` skill evidence | Not yet recorded | Validate protected routes, gestures, keyboard, sheets, and native modules. |
+
+### Recorded App runs
+
+#### 2026-07-18 authentication session lifecycle
+
+- Environment: run-owned OrbStack PostgreSQL, Redis, and Elasticsearch; migrated local API; Expo development client connected to a local Metro bundle.
+- Simulator: iPhone Air, iOS 26.3, UDID `09864DA9-634C-4FA0-8900-4436A372F656`, portrait; bundle ID `io.github.chenyangzz.cove.mobile`.
+- Covered flow: synthetic account fixture → App login → authenticated `/api/auth/me` hydration → process termination and SecureStore restoration without another login → App logout → second process restart remaining anonymous.
+- Network assertions: the App login and hydration requests reached the local API with HTTP 200; the authenticated restart issued `/api/auth/me` without a new `/api/auth/login`; the post-logout restart issued neither request.
+- Evidence: `output/ios-simulator/runs/20260718-auth-session/evidence/05-login-success.png`, `06-session-restored.png`, `09-logout-complete.png`, `11-logout-persists-settled.png`, and the logout-restart lifecycle recording `12-logout-restart-lifecycle.mp4`.
+- Automation status: interactive skill evidence, not a deterministic CI test. Password entry and logout required user handoff after Computer Use timed out while reading the Simulator accessibility tree.
+- Cleanup: Metro and the local API were stopped; the `cove-e2e` containers, network, and volumes were removed through `make e2e-down`.
+- Remaining coverage: registration through the App UI, a forced access-token expiry with refresh-token rotation, and expired/revoked-session rejection.
 
 ## Auxiliary browser coverage
 
