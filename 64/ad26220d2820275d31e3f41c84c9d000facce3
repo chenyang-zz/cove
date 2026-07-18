@@ -1,0 +1,35 @@
+packages/app/mobile/src/app/(app)/chat.tsx
+  s_933bb185a2fba5::t_7121ae47e4cf1f 94
+  s_933bb185a2fba5::t_e73df030f8df04 98-125,180-182,184,226,703-722
+packages/app/mobile/src/app/(app)/profile.tsx
+  s_933bb185a2fba5::t_e73df030f8df04 191
+  s_933bb185a2fba5::t_7121ae47e4cf1f 1
+packages/app/mobile/src/components/ChatDrawer.tsx
+  s_933bb185a2fba5::t_e73df030f8df04 79-80,98,104-106
+  s_933bb185a2fba5::t_7121ae47e4cf1f 1
+packages/app/mobile/src/components/AssistantMessage.tsx
+  s_933bb185a2fba5::t_7121ae47e4cf1f 1
+  s_933bb185a2fba5::t_e73df030f8df04 61
+packages/app/mobile/src/core/knowledge.test.ts
+  s_933bb185a2fba5::t_e73df030f8df04 3-4
+packages/app/mobile/src/core/chat.test.ts
+  s_933bb185a2fba5::t_e73df030f8df04 3-4
+packages/app/mobile/src/app/(app)/knowledge.tsx
+  s_933bb185a2fba5::t_e73df030f8df04 63-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "64ad26220d2820275d31e3f41c84c9d000facce3",
+  "prompts": {},
+  "sessions": {
+    "s_933bb185a2fba5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7578-de9e-7832-a984-f34af61b104e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
