@@ -1,0 +1,44 @@
+internal/domain/flow/gateway/orchestrator_test.go
+  s_848ccf73a23603::t_2a9fccdf2bec4f 1-40
+internal/worker/tasks/gateway_deliver.go
+  s_848ccf73a23603::t_526a8de047e77f 12,145
+docs/gateway.md
+  s_848ccf73a23603::t_7734867d4956b7 48,121-124,137,1311,1345
+internal/logic/gateway/helper_test.go
+  s_848ccf73a23603::t_806f1fe61cb54a 13
+internal/domain/flow/gateway/orchestrator.go
+  s_848ccf73a23603::t_18a5ea5a2d8289 1,11,14-15,20-21,26,28-38,40-54
+  s_848ccf73a23603::t_f8ab603a0c413a 22,27,39
+internal/domain/flow/gateway/media_test.go
+  s_848ccf73a23603::t_3648020ff33d16 9
+internal/domain/flow/gateway/ingress_test.go
+  s_848ccf73a23603::t_3648020ff33d16 15,23
+internal/logic/gateway/doc.go
+  s_848ccf73a23603::t_f8362aca3099f0 1-2
+internal/domain/flow/gateway/ingress.go
+  s_848ccf73a23603::t_f8ab603a0c413a 32,81,104,206,248,292,307,329,356,377,406
+internal/domain/flow/gateway/media.go
+  s_848ccf73a23603::t_f8ab603a0c413a 26,61,125
+internal/gateway/runtime/manager.go
+  s_848ccf73a23603::t_526a8de047e77f 12,30,38,98,122,128
+internal/transport/gatewayhttp/router.go
+  s_848ccf73a23603::t_526a8de047e77f 12,43,45,49,66,104
+internal/worker/tasks/gateway_turn.go
+  s_848ccf73a23603::t_526a8de047e77f 14,190
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "89f3eb5a9865cec81300b4c3f7a3baa16fd7a3d9",
+  "prompts": {},
+  "sessions": {
+    "s_848ccf73a23603": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7418-3f03-7f90-8966-d3812c751c3a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
