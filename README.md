@@ -17,6 +17,17 @@ pnpm --dir frontend install
 go mod tidy
 ```
 
+When working from the parent Cove workspace, use the root Makefile as the shared command entry point:
+
+```sh
+make app-dev
+make app-build
+make app-frontend-test
+make app-mobile-test
+```
+
+These targets delegate to this repository's existing `Taskfile.yml` and package scripts.
+
 ## Development
 
 ### Desktop
