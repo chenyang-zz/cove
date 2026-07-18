@@ -1,0 +1,80 @@
+internal/logic/document/document_test.go
+  s_848ccf73a23603::t_8efcede89ff5d7 208-216
+internal/logic/skill/skill_test.go
+  s_848ccf73a23603::t_8efcede89ff5d7 563-571
+internal/svc/context.go
+  s_848ccf73a23603::t_37981ad3cdf4e6 121
+internal/repository/knowledge_base.go
+  s_848ccf73a23603::t_bb5f23e00a2eca 14
+internal/logic/chat/chat_stream_test.go
+  s_848ccf73a23603::t_8efcede89ff5d7 791-799
+internal/svc/channel_registry_test.go
+  s_848ccf73a23603::t_37981ad3cdf4e6 1,4-6,8,11-16,18-29,31-32
+internal/svc/channel_registry.go
+  s_848ccf73a23603::t_37981ad3cdf4e6 1,12,14
+internal/repository/postgres/knowledge_base.go
+  s_848ccf73a23603::t_bb5f23e00a2eca 11,72-111
+  s_caa2097fd07076::t_432cb2f0bc128e 112-113
+internal/domain/tools/builtin/knowledge_test.go
+  s_848ccf73a23603::t_8efcede89ff5d7 326-334
+internal/repository/postgres/document_knowledgebase_test.go
+  s_848ccf73a23603::t_78a633c519434e 574
+internal/domain/flow/chat/orchestrator_test.go
+  s_848ccf73a23603::t_8efcede89ff5d7 1242-1250
+docs/gateway.md
+  s_e6225b98b8d62f::t_9dc23c01c90209 1,3,5,7,9,11,13-19,21,23-26,28,30-45,47-56,59-421,423-424,427-536,538-556,558-806,811-814,816,818-819,823-890,894-902,904-910,913-917,926-936,938-947,952-953,955,959-1005,1007,1012-1017,1019-1021,1025-1341,1343,1345-1355,1358
+  s_e6225b98b8d62f::t_06dc6d2308a8b5 537,557,954,956-958,1356
+  s_e6225b98b8d62f::t_5cb8e37bea4734 46,57-58,422,425-426
+internal/logic/image/image_test.go
+  s_848ccf73a23603::t_8efcede89ff5d7 188-196
+internal/logic/knowledgebase/set_default_knowledge_base.go
+  s_848ccf73a23603::t_bb5f23e00a2eca 41
+.claude/skills/gitnexus/gitnexus-cli/SKILL.md
+  s_caa2097fd07076::t_77b42c24f65e35 8-10,17,27,34,42,55,72
+.claude/skills/gitnexus/gitnexus-debugging/SKILL.md
+  s_caa2097fd07076::t_faef23ed3ab2e6 19-20,22,25,31,33,35,43,48,52,55,60,63,69,76-86,90,94
+.claude/skills/gitnexus/gitnexus-exploring/SKILL.md
+  s_caa2097fd07076::t_09ba6c5f993d03 21-22,26,32,34,50,53,58,61,71,74
+.claude/skills/gitnexus/gitnexus-guide/SKILL.md
+  s_caa2097fd07076::t_e56e8165f808a3 18,38,42-113,130-133
+.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md
+  s_caa2097fd07076::t_ed032ec562f63c 20,22,26,31,35,58,61,76,79,89
+.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md
+  s_caa2097fd07076::t_35a1937efe3eda 19-21,25,32-35,42-43,46,53,55,58,64,67,69,73,76,81,84,90,101,103,109-110,113,115,118
+AGENTS.md
+  s_caa2097fd07076::t_02f5a7973775d7 4,6,10-11,13-15,19,21-22,28-31
+CLAUDE.md
+  s_caa2097fd07076::t_45b5719d5d3abb 4,6,10-11,13-15,19,21-22,28-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "97afa43bda03f07ca8a051e1277f1d71b88d458c",
+  "prompts": {},
+  "sessions": {
+    "s_848ccf73a23603": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7418-3f03-7f90-8966-d3812c751c3a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    },
+    "s_caa2097fd07076": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7408-4aed-7012-b7fb-1f20995e2d3d",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    },
+    "s_e6225b98b8d62f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f752c-8bd8-7f53-9d4e-38ca78ff71b5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
