@@ -1,0 +1,31 @@
+internal/domain/tools/builtin/constants.go
+  s_87e8b5f0ccf483::t_2188ab1d2ffba9 8-11
+internal/domain/tools/builtin/persona.go
+  s_87e8b5f0ccf483::t_de5b9e1e8f816c 1-183
+internal/domain/tools/builtin/persona_test.go
+  s_87e8b5f0ccf483::t_8c56104086d45b 1-255
+internal/domain/tools/catalog.go
+  s_87e8b5f0ccf483::t_33cb5fec9742a7 21-24,40-44
+internal/domain/tools/catalog_test.go
+  s_87e8b5f0ccf483::t_5fd9b4a2a055ad 94-112
+internal/logic/toolconfig/toolconfig_test.go
+  s_87e8b5f0ccf483::t_8559ce31ff6421 28-29,31-37
+internal/transport/http/router_test.go
+  s_87e8b5f0ccf483::t_54072863f12458 1778-1784,1814-1815
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "0a13027ea9f99147464d3603544f0bd5f63784c7",
+  "prompts": {},
+  "sessions": {
+    "s_87e8b5f0ccf483": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_87e8b5f0ccf483",
+        "model": "unknown"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
