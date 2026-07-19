@@ -1,0 +1,21 @@
+.codex/rules/frontend.md
+  s_caa2097fd07076::t_3d5119b151168c 14-26
+packages/app/AGENTS.md
+  s_caa2097fd07076::t_3d5119b151168c 58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "6e64653989653c20dec2c7e44ee9347dbd84972b",
+  "prompts": {},
+  "sessions": {
+    "s_caa2097fd07076": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7408-4aed-7012-b7fb-1f20995e2d3d",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
