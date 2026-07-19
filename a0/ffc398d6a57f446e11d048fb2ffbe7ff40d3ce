@@ -1,0 +1,29 @@
+CLAUDE.md
+  s_e3078b7a7a7582::t_4caa6d3450b57a 4,43
+AGENTS.md
+  s_caa2097fd07076::t_dd486f116c44d9 48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "a0ffc398d6a57f446e11d048fb2ffbe7ff40d3ce",
+  "prompts": {},
+  "sessions": {
+    "s_caa2097fd07076": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7408-4aed-7012-b7fb-1f20995e2d3d",
+        "model": "unknown"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    },
+    "s_e3078b7a7a7582": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4fa9-f0d2-7b33-b7bc-bf22f65eeb0a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
