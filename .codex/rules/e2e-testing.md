@@ -2,6 +2,23 @@
 
 These rules apply when adding, changing, running, or diagnosing tests that cross a real Cove process or product boundary. Read `.codex/rules/architecture.md` first, then read the frontend and backend rules for every surface exercised by the scenario.
 
+## 0. Staged Agent and Model Routing
+
+Use the project-scoped agents under `.codex/agents/` for E2E work. The root agent owns the plan, delegates bounded stages, prevents overlapping edits, and combines the results. Do not treat delegation as permission to skip any environment, safety, evidence, or reporting rule in this file.
+
+1. **Explore with `e2e-explorer`.** Use `gpt-5.6-terra` at medium reasoning to identify the affected product surface, current coverage, applicable commands, prerequisites, and likely files. This stage is read-only and should return a concise execution plan rather than raw search output.
+2. **Run with `e2e-runner`.** Use explicit `gpt-5.6-sol` at medium reasoning for deterministic setup, focused tests, E2E execution, environment lifecycle management, teardown, first-failure evidence confirmation, and sanitized evidence collection. Cove's native and cross-boundary runs involve enough multi-step tool use that the flagship model is preferred here. The runner may make only explicitly authorized, test-local fixture or harness fixes that do not change product code, shared lifecycle behavior, or an App/Server contract; all other fixes must be escalated.
+3. **Diagnose with `e2e-debugger`.** Use explicit `gpt-5.6-sol` at high reasoning when a test fails repeatedly, appears flaky, crosses App/Server/native boundaries, or requires a product or harness fix. Diagnose the first failing layer, assess impact before editing symbols, implement the smallest justified fix, and rerun the narrowest proving scenario.
+4. **Review with `e2e-reviewer`.** Use explicit `gpt-5.6-sol` at high reasoning after changes and validation to check contract coverage, false-positive risk, flake risk, isolation, cleanup, artifact quality, and gaps. Review is read-only unless the root agent separately authorizes a follow-up fix.
+
+Default escalation policy:
+
+- A first deterministic failure returns to the runner for evidence confirmation. If the confirmed cause is confined to a test-local fixture or harness, the runner may fix it only with explicit root-agent authorization.
+- A repeated failure, inconsistent outcome, unexplained timeout, or unexplained cross-layer mismatch escalates to the debugger; retries must never erase the first failure.
+- Product-code edits, shared lifecycle edits, and changes that affect App/Server contracts always require debugger ownership and the applicable GitNexus impact analysis before symbol changes.
+- When any product code, test, fixture, harness, or lifecycle configuration changes, final completion requires reviewer output plus the root agent's separate App, Server, and cross-boundary summary.
+- A pure execution-only task with no file changes may omit the debugger and reviewer when no escalation condition occurs. The explorer may also be omitted when the affected surface and exact command are already established. Preserve the model split: `gpt-5.6-terra` for lightweight read-only discovery, `gpt-5.6-sol` at medium reasoning for reliable execution, and `gpt-5.6-sol` at high reasoning for complex diagnosis or quality-critical review. Use these explicit subagent model IDs rather than the `gpt-5.6` alias.
+
 ## 1. Definition and Current State
 
 - Cove currently has one frontend product: the Expo App under `packages/app/mobile/`. App acceptance means exercising this native application, with iOS Simulator as the primary environment.
