@@ -1,0 +1,25 @@
+CONTRIBUTING.md
+  s_caa2097fd07076::t_3012b5417a8458 81-90
+.codex/rules/git-workflow.md
+  s_caa2097fd07076::t_3012b5417a8458 1-46
+AGENTS.md
+  s_caa2097fd07076::t_3012b5417a8458 8
+.codex/rules/worktree.md
+  s_caa2097fd07076::t_3012b5417a8458 30,32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "3e8b513da7f0fef3a97ef41da9f5994ddad39c8f",
+  "prompts": {},
+  "sessions": {
+    "s_caa2097fd07076": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7408-4aed-7012-b7fb-1f20995e2d3d",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "chenyang <904852749@qq.com>"
+    }
+  }
+}
