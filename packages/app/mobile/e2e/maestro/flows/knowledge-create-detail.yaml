@@ -1,0 +1,102 @@
+appId: io.github.chenyangzz.cove.mobile
+name: Knowledge create and detail
+tags:
+  - ios
+  - local-real-db
+  - knowledge
+---
+- clearKeychain
+- launchApp:
+    clearState: true
+- openLink: ${MAESTRO_EXPO_DEV_CLIENT_URL}
+- extendedWaitUntil:
+    visible: (Continue|登录)
+    timeout: 60000
+- tapOn:
+    text: Continue
+    optional: true
+    label: Dismiss the Expo development-client first-run guide
+- waitForAnimationToEnd
+- tapOn:
+    checked: true
+    rightOf: Tools button
+    below: Fast refresh
+    label: Disable the Expo development-client floating tools button
+- assertVisible:
+    checked: false
+    rightOf: Tools button
+    below: Fast refresh
+    label: Confirm the Expo development-client tools button is disabled
+- tapOn:
+    text: Close
+    optional: true
+    label: Close the Expo development menu after its first-run guide
+- extendedWaitUntil:
+    visible:
+      id: auth-login-action
+    timeout: 20000
+
+- tapOn:
+    id: auth-login-input
+- inputText: ${MAESTRO_E2E_USERNAME}
+- tapOn:
+    id: auth-password-input
+- inputText: ${MAESTRO_E2E_PASSWORD}
+- tapOn:
+    id: auth-login-action
+- tapOn:
+    text: 以后
+    optional: true
+    label: Dismiss the iOS password-save prompt when it appears
+- tapOn:
+    text: Not Now
+    optional: true
+    label: Dismiss the English iOS password-save prompt when it appears
+- extendedWaitUntil:
+    visible:
+      id: chat-message-input
+    timeout: 20000
+
+- tapOn:
+    id: chat-drawer-open
+- assertVisible:
+    id: chat-drawer-close
+- tapOn:
+    text: 打开知识库
+- extendedWaitUntil:
+    visible:
+      id: knowledge-.*-open
+    timeout: 20000
+- assertVisible: 共 1 个
+- takeScreenshot: 01-knowledge-list-before-create
+
+- tapOn: 新建知识库
+- assertVisible:
+    id: knowledge-name-input
+- tapOn:
+    id: knowledge-name-input
+- inputText: ${MAESTRO_E2E_KNOWLEDGE_NAME}
+- tapOn:
+    id: knowledge-description-input
+- inputText: ${MAESTRO_E2E_KNOWLEDGE_DESCRIPTION}
+- tapOn:
+    id: knowledge-create-submit
+
+- extendedWaitUntil:
+    visible: ${MAESTRO_E2E_KNOWLEDGE_NAME}
+    timeout: 20000
+- assertVisible: ${MAESTRO_E2E_KNOWLEDGE_DESCRIPTION}
+- assertVisible: 0 篇文档
+- assertVisible: 共 0 篇
+- assertVisible: 这个知识库暂时是空的，后续可从上传入口添加资料。
+- assertNotVisible:
+    id: knowledge-create-submit
+- takeScreenshot: 02-created-knowledge-detail
+
+- tapOn: 返回知识库列表
+- extendedWaitUntil:
+    visible: 共 2 个
+    timeout: 10000
+- assertVisible:
+    text: ${MAESTRO_E2E_KNOWLEDGE_NAME}，0 篇文档
+- takeScreenshot: 03-created-knowledge-in-list

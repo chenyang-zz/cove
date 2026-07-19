@@ -12,6 +12,7 @@ import { Stack, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CreateKnowledgeSheet } from '@/components/CreateKnowledgeSheet';
 import { ApiError } from '@/core/api';
 import { listKnowledgeBases, setDefaultKnowledgeBase, type KnowledgeBase } from '@/core/knowledge';
 import { loadStoredSession } from '@/core/session';
@@ -28,6 +29,7 @@ export default function KnowledgeScreen() {
   const [state, setState] = useState<PageState>('loading');
   const [refreshing, setRefreshing] = useState(false);
   const [settingDefaultID, setSettingDefaultID] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [error, setError] = useState('');
   const settingDefaultRef = useRef(false);
 
@@ -95,6 +97,27 @@ export default function KnowledgeScreen() {
     }
   }, [signOut]);
 
+  const openDetail = useCallback((item: KnowledgeBase) => {
+    router.push({
+      pathname: '/(app)/knowledge/[knowledgeBaseId]',
+      params: knowledgeRouteParams(item),
+    });
+  }, [router]);
+
+  const handleCreated = useCallback((item: KnowledgeBase) => {
+    setItems((current) => [item, ...current.filter((currentItem) => currentItem.id !== item.id)]);
+    setState('ready');
+    setError('');
+    openDetail(item);
+  }, [openDetail]);
+
+  const handleSessionExpired = useCallback(async () => {
+    const storedSession = await loadStoredSession();
+    if (!storedSession) {
+      await signOut();
+    }
+  }, [signOut]);
+
   return (
     <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: palette.page }]}>
       <Stack.Toolbar placement="left">
@@ -105,6 +128,16 @@ export default function KnowledgeScreen() {
           separateBackground
           tintColor={palette.accent}
           onPress={() => router.back()}
+        />
+      </Stack.Toolbar>
+      <Stack.Toolbar placement="right">
+        <Stack.Toolbar.Button
+          accessibilityLabel="新建知识库"
+          icon="plus"
+          hidesSharedBackground={false}
+          separateBackground
+          tintColor={palette.accent}
+          onPress={() => setCreateOpen(true)}
         />
       </Stack.Toolbar>
       {state === 'loading' ? (
@@ -120,6 +153,7 @@ export default function KnowledgeScreen() {
             accessibilityRole="button"
             accessibilityLabel="重新加载知识库"
             onPress={() => void load()}
+            testID="knowledge-retry"
             style={({ pressed }) => [
               styles.retryButton,
               { backgroundColor: palette.accent },
@@ -149,7 +183,9 @@ export default function KnowledgeScreen() {
               </Text>
             </View>
           ) : null}
-          ListEmptyComponent={<KnowledgeEmpty palette={palette} />}
+          ListEmptyComponent={(
+            <KnowledgeEmpty palette={palette} onCreate={() => setCreateOpen(true)} />
+          )}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           renderItem={({ item }) => (
             <KnowledgeRow
@@ -157,6 +193,7 @@ export default function KnowledgeScreen() {
               palette={palette}
               isSettingDefault={settingDefaultID === item.id}
               defaultChangeDisabled={settingDefaultID !== null || refreshing}
+              onOpen={() => openDetail(item)}
               onSetDefault={() => void handleSetDefault(item)}
             />
           )}
@@ -167,6 +204,14 @@ export default function KnowledgeScreen() {
           <Text numberOfLines={2} style={[styles.refreshErrorText, { color: palette.danger }]}>{error}</Text>
         </View>
       ) : null}
+      {createOpen ? (
+        <CreateKnowledgeSheet
+          palette={palette}
+          onClose={() => setCreateOpen(false)}
+          onCreated={handleCreated}
+          onSessionExpired={handleSessionExpired}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -176,12 +221,14 @@ function KnowledgeRow({
   palette,
   isSettingDefault,
   defaultChangeDisabled,
+  onOpen,
   onSetDefault,
 }: {
   item: KnowledgeBase;
   palette: Palette;
   isSettingDefault: boolean;
   defaultChangeDisabled: boolean;
+  onOpen: () => void;
   onSetDefault: () => void;
 }) {
   const documentCount = Math.max(0, item.doc_count ?? 0);
@@ -191,81 +238,118 @@ function KnowledgeRow({
 
   return (
     <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-      <View
-        style={[
-          styles.iconTile,
-          { backgroundColor: `${iconColor}16`, borderColor: `${iconColor}2E` },
-        ]}>
-        <SymbolView name="books.vertical.fill" size={22} tintColor={iconColor} weight="semibold" />
-      </View>
-      <View style={styles.cardBody}>
-        <View style={styles.cardHeading}>
-          <Text numberOfLines={1} style={[styles.cardTitle, { color: palette.text }]}>{item.name}</Text>
-          {item.is_default ? (
-            <View style={[styles.defaultBadge, { backgroundColor: `${palette.accent}14` }]}>
-              <SymbolView name="star.fill" size={10} tintColor={palette.accent} weight="semibold" />
-              <Text style={[styles.defaultLabel, { color: palette.accent }]}>默认</Text>
-            </View>
-          ) : (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`将${item.name}设为默认知识库`}
-              accessibilityHint="设为默认后，聊天会优先使用这个知识库"
-              accessibilityState={{ disabled: defaultChangeDisabled, busy: isSettingDefault }}
-              disabled={defaultChangeDisabled}
-              hitSlop={8}
-              onPress={onSetDefault}
-              testID={`knowledge-${item.id}-set-default`}
-              style={({ pressed }) => [
-                styles.defaultAction,
-                defaultChangeDisabled && styles.defaultActionDisabled,
-                pressed && !defaultChangeDisabled && styles.defaultActionPressed,
-              ]}>
-              <View style={[styles.defaultActionSurface, { backgroundColor: `${palette.accent}12` }]}>
-                {isSettingDefault ? (
-                  <ActivityIndicator size="small" color={palette.accent} />
-                ) : (
-                  <SymbolView name="star" size={16} tintColor={palette.accent} weight="semibold" />
-                )}
-              </View>
-            </Pressable>
-          )}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${item.name}，${documentCount} 篇文档`}
+        accessibilityHint="打开知识库详情"
+        onPress={onOpen}
+        testID={`knowledge-${item.id}-open`}
+        style={({ pressed }) => [styles.cardOpen, pressed && styles.cardPressed]}>
+        <View
+          style={[
+            styles.iconTile,
+            { backgroundColor: `${iconColor}16`, borderColor: `${iconColor}2E` },
+          ]}>
+          <SymbolView name="books.vertical.fill" size={22} tintColor={iconColor} weight="semibold" />
         </View>
-        <Text numberOfLines={2} style={[styles.cardDescription, { color: palette.textMuted }]}>
-          {description || '暂无描述'}
-        </Text>
-        <View style={styles.cardMeta}>
-          <View style={styles.metaItem}>
-            <SymbolView name="doc.text.fill" size={12} tintColor={palette.textMuted} weight="medium" />
-            <Text style={[styles.metaText, { color: palette.textSecondary }]}>{documentCount} 篇文档</Text>
-          </View>
-          <View style={styles.chatState}>
-            <SymbolView
-              name={item.chat_enabled ? 'checkmark.circle.fill' : 'minus.circle.fill'}
-              size={13}
-              tintColor={chatStateColor}
-              weight="semibold"
-            />
-            <Text style={[styles.metaText, { color: palette.textSecondary }]}>
-              {item.chat_enabled ? '聊天已启用' : '聊天未启用'}
+        <View style={styles.cardBody}>
+          <View style={styles.cardHeading}>
+            <Text
+              numberOfLines={1}
+              style={[styles.cardTitle, !item.is_default && styles.cardTitleActionSpace, { color: palette.text }]}>
+              {item.name}
             </Text>
+            {item.is_default ? (
+              <View style={[styles.defaultBadge, { backgroundColor: `${palette.accent}14` }]}>
+                <SymbolView name="star.fill" size={10} tintColor={palette.accent} weight="semibold" />
+                <Text style={[styles.defaultLabel, { color: palette.accent }]}>默认</Text>
+              </View>
+            ) : null}
+          </View>
+          <Text numberOfLines={2} style={[styles.cardDescription, { color: palette.textMuted }]}>
+            {description || '暂无描述'}
+          </Text>
+          <View style={styles.cardMeta}>
+            <View style={styles.metaItem}>
+              <SymbolView name="doc.text.fill" size={12} tintColor={palette.textMuted} weight="medium" />
+              <Text style={[styles.metaText, { color: palette.textSecondary }]}>{documentCount} 篇文档</Text>
+            </View>
+            <View style={styles.chatState}>
+              <SymbolView
+                name={item.chat_enabled ? 'checkmark.circle.fill' : 'minus.circle.fill'}
+                size={13}
+                tintColor={chatStateColor}
+                weight="semibold"
+              />
+              <Text style={[styles.metaText, { color: palette.textSecondary }]}>
+                {item.chat_enabled ? '聊天已启用' : '聊天未启用'}
+              </Text>
+            </View>
           </View>
         </View>
-      </View>
+      </Pressable>
+      {!item.is_default ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`将${item.name}设为默认知识库`}
+          accessibilityHint="设为默认后，聊天会优先使用这个知识库"
+          accessibilityState={{ disabled: defaultChangeDisabled, busy: isSettingDefault }}
+          disabled={defaultChangeDisabled}
+          hitSlop={8}
+          onPress={onSetDefault}
+          testID={`knowledge-${item.id}-set-default`}
+          style={({ pressed }) => [
+            styles.defaultAction,
+            defaultChangeDisabled && styles.defaultActionDisabled,
+            pressed && !defaultChangeDisabled && styles.defaultActionPressed,
+          ]}>
+          <View style={[styles.defaultActionSurface, { backgroundColor: `${palette.accent}12` }]}>
+            {isSettingDefault ? (
+              <ActivityIndicator size="small" color={palette.accent} />
+            ) : (
+              <SymbolView name="star" size={16} tintColor={palette.accent} weight="semibold" />
+            )}
+          </View>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
 
-function KnowledgeEmpty({ palette }: { palette: Palette }) {
+function KnowledgeEmpty({ palette, onCreate }: { palette: Palette; onCreate: () => void }) {
   return (
     <View style={styles.centerState}>
       <View style={[styles.emptyIcon, { backgroundColor: palette.surfaceMuted, borderColor: palette.border }]}>
         <SymbolView name="books.vertical" size={34} tintColor={palette.accent} weight="medium" />
       </View>
       <Text style={[styles.stateTitle, { color: palette.text }]}>还没有知识库</Text>
-      <Text style={[styles.stateMessage, { color: palette.textMuted }]}>在桌面端添加资料后，会显示在这里并用于聊天。</Text>
+      <Text style={[styles.stateMessage, { color: palette.textMuted }]}>创建一个知识库，之后就可以向其中添加资料并用于聊天。</Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="创建第一个知识库"
+        onPress={onCreate}
+        testID="knowledge-empty-create"
+        style={({ pressed }) => [
+          styles.emptyAction,
+          { backgroundColor: palette.accent },
+          pressed && styles.pressed,
+        ]}>
+        <SymbolView name="plus" size={15} tintColor={palette.accentText} weight="bold" />
+        <Text style={[styles.emptyActionLabel, { color: palette.accentText }]}>新建知识库</Text>
+      </Pressable>
     </View>
   );
+}
+
+function knowledgeRouteParams(item: KnowledgeBase) {
+  return {
+    knowledgeBaseId: item.id,
+    name: item.name,
+    description: item.description ?? '',
+    color: item.color ?? '',
+    doc_count: String(Math.max(0, item.doc_count ?? 0)),
+    chat_enabled: item.chat_enabled ? 'true' : 'false',
+  };
 }
 
 function KnowledgeSkeleton({ palette }: { palette: Palette }) {
@@ -279,11 +363,13 @@ function KnowledgeSkeleton({ palette }: { palette: Palette }) {
         <View
           key={index}
           style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-          <View style={[styles.iconTile, { backgroundColor: palette.surfaceMuted }]} />
-          <View style={styles.cardBody}>
-            <View style={[styles.skeletonTitle, { width: index === 1 ? '52%' : '64%', backgroundColor: palette.surfaceMuted }]} />
-            <View style={[styles.skeletonLine, { width: index === 2 ? '72%' : '88%', backgroundColor: palette.surfaceMuted }]} />
-            <View style={[styles.skeletonMeta, { backgroundColor: palette.surfaceMuted }]} />
+          <View style={styles.cardOpen}>
+            <View style={[styles.iconTile, { backgroundColor: palette.surfaceMuted }]} />
+            <View style={styles.cardBody}>
+              <View style={[styles.skeletonTitle, { width: index === 1 ? '52%' : '64%', backgroundColor: palette.surfaceMuted }]} />
+              <View style={[styles.skeletonLine, { width: index === 2 ? '72%' : '88%', backgroundColor: palette.surfaceMuted }]} />
+              <View style={[styles.skeletonMeta, { backgroundColor: palette.surfaceMuted }]} />
+            </View>
           </View>
         </View>
       ))}
@@ -321,12 +407,12 @@ const styles = StyleSheet.create({
   separator: { height: 12 },
   card: {
     minHeight: 104,
-    padding: 14,
     borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    overflow: 'hidden',
   },
+  cardOpen: { minHeight: 104, padding: 14, flexDirection: 'row', alignItems: 'flex-start' },
+  cardPressed: { opacity: 0.72, transform: [{ scale: 0.992 }] },
   iconTile: {
     width: 46,
     height: 46,
@@ -338,6 +424,7 @@ const styles = StyleSheet.create({
   cardBody: { minWidth: 0, flex: 1, marginLeft: 13 },
   cardHeading: { minHeight: 23, flexDirection: 'row', alignItems: 'center', gap: 8 },
   cardTitle: { minWidth: 0, flex: 1, fontSize: 16, lineHeight: 22, fontWeight: '700', letterSpacing: -0.15 },
+  cardTitleActionSpace: { paddingRight: 34 },
   defaultBadge: {
     height: 24,
     paddingHorizontal: 8,
@@ -348,6 +435,9 @@ const styles = StyleSheet.create({
   },
   defaultLabel: { fontSize: 10, lineHeight: 13, fontWeight: '700', includeFontPadding: false },
   defaultAction: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
     width: 30,
     height: 30,
     alignItems: 'center',
@@ -379,6 +469,17 @@ const styles = StyleSheet.create({
   },
   stateTitle: { marginTop: 18, fontSize: 18, lineHeight: 24, fontWeight: '700', textAlign: 'center' },
   stateMessage: { maxWidth: 270, marginTop: 7, fontSize: 13, lineHeight: 20, textAlign: 'center' },
+  emptyAction: {
+    height: 44,
+    marginTop: 20,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  emptyActionLabel: { fontSize: 14, lineHeight: 19, fontWeight: '700' },
   retryButton: { minWidth: 108, height: 44, marginTop: 20, paddingHorizontal: 18, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   retryLabel: { fontSize: 14, lineHeight: 20, fontWeight: '700' },
   pressed: { opacity: 0.7, transform: [{ scale: 0.98 }] },

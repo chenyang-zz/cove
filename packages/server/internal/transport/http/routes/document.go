@@ -30,6 +30,7 @@ func RegisterDocumentRoutes(api *gin.RouterGroup, document handler.DocumentHandl
 	// @description 获取文档列表
 	// @input request.ListDocumentsRequest
 	// @output response.PageListResponse[*response.DocumentResponse]
+	documentGroup.GET("", document.ListDocuments)
 	documentGroup.GET("/", document.ListDocuments)
 	documentGroup.GET("/list", document.ListDocuments)
 
