@@ -11,6 +11,19 @@ These rules apply to work under `packages/app/`. Read `packages/app/AGENTS.md` a
 - Audit both clients when an API or SSE contract changes, even if the requested screen exists in only one client.
 - Do not hard-code deployment URLs. Use `VITE_API_BASE_URL` for React/Vite and `EXPO_PUBLIC_API_BASE_URL` for Expo mobile. Keep environment-specific values in uncommitted local environment files.
 
+## 1.1 Mandatory App Design Workflow
+
+- For every new App screen or flow, and every material visual redesign of an existing App surface, load and use the `imagegen-frontend-mobile` skill before writing UI implementation code. This is a mandatory design gate for Cove's Expo App.
+- Use the skill for work that requires visual or interaction-design judgment, including navigation composition, information hierarchy, layout, typography, palette, imagery, icon direction, component appearance, responsive states, onboarding, authentication, chat, profile, settings, empty states, errors, sheets, and multi-screen flows.
+- The skill generates design images only. Complete image generation as a distinct design work unit; do not ask it to write React Native, SwiftUI, Flutter, or HTML. Begin the implementation work unit only after the generated screen set is available as the design reference.
+- Default to `iOS-native premium` because iOS is Cove's primary App platform. Use Android-native or cross-platform mode only when the requirement explicitly targets that platform or a shared design must be proven on both platforms.
+- Generate enough standalone screens to cover the affected user journey and its material states. Do not replace a flow with one compressed collage, crop old renders as new screens, or accept unreadable text, unsafe system regions, inconsistent mockups, generic template styling, or screen-to-screen design drift.
+- Keep the generated set consistent with Cove's product identity, current Figma source, existing design tokens, navigation model, and buildable Expo/React Native constraints. When a generated concept conflicts with an established product contract, resolve the conflict before implementation rather than silently changing behavior.
+- Treat the generated phone frame as presentation context, not App UI to implement. Translate the screen content, safe areas, hierarchy, components, and states into the real native layout.
+- Preserve the generated images or conversation references long enough for implementation review. Do not commit generated design assets unless the user explicitly requests that they become repository artifacts.
+- After implementation, use the `ios-simulator` skill to compare the running App against the generated reference for hierarchy, spacing, typography, colors, safe areas, interaction states, and complete flow behavior. Report material intentional differences.
+- The design gate is not required for behavior-only changes with no visual effect, test-only selector or accessibility metadata changes that preserve appearance, dependency/tooling updates, or exact implementation of an already approved supplied design. If such work introduces design judgment, the gate becomes required.
+
 ## 2. Dependency and Configuration Discipline
 
 - Use the package manager and lockfile already owned by each client. Both current clients use pnpm; do not introduce npm or Yarn lockfiles.

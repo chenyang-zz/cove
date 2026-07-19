@@ -55,4 +55,5 @@ The Cove monorepo is indexed by GitNexus as **cove**. Use the GitNexus MCP tools
 ## iOS UI Debugging
 
 - Treat iOS as the primary mobile platform: design, implement, and validate mobile-facing changes against iOS first.
+- Before implementing a new App screen/flow or a material visual redesign, load and use the `imagegen-frontend-mobile` skill to generate the design reference as a separate image-only work unit. Follow `.codex/rules/frontend.md` for its trigger boundary, design-quality gate, implementation handoff, and Simulator comparison requirements.
 - When debugging iOS visual or interaction changes, run the app in an iOS Simulator by default. Use a physical device only for device-specific verification after simulator validation.
