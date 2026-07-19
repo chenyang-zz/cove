@@ -26,6 +26,7 @@ Current Server real-database coverage:
 - Backend conversation creation, rename, listing and deletion through the public API
 - Message persistence and pagination through the real PostgreSQL repository and public API
 - Chat/SSE message creation through a deterministic local OpenAI-compatible provider, Redis, the public API, and PostgreSQL
+- Knowledge-base creation and harmless Markdown upload through the public API, local storage, Redis/asynq worker, deterministic embeddings, PostgreSQL, and Elasticsearch search
 - Cross-user conversation and message isolation
 - Profile normalization and persistence, password rejection and rotation, and old/new password login behavior
 
@@ -59,7 +60,7 @@ Run the Server real-database prerequisite first:
 make server-db-smoke
 ```
 
-This starts run-owned PostgreSQL, Redis, and Elasticsearch services in OrbStack, starts the deterministic local OpenAI-compatible provider, runs the real migration binary, starts the real API, and executes Chat/SSE, conversation/message, and profile/password persistence scenarios. It does not require the frontend toolchain or a live LLM account.
+This starts run-owned PostgreSQL, Redis, and Elasticsearch services in OrbStack, starts the deterministic local OpenAI-compatible provider, runs the real migration binary, starts the real API and worker, and executes Chat/SSE, document-ingestion, conversation/message, and profile/password persistence scenarios. It does not require the frontend toolchain or a live LLM account.
 
 Run the auxiliary React/Vite smoke with automatic teardown:
 
@@ -96,7 +97,7 @@ E2E_PROJECT=<run-owned-project> \
 make e2e-app-backend
 ```
 
-The command starts PostgreSQL, Redis, Elasticsearch, migration, the API, and the deterministic provider on the stable manual ports. In App mode only, the API binds to all host interfaces so the Simulator can reach the Mac LAN address. It blocks until interrupted and then removes its host processes, containers, network, and volumes.
+The command starts PostgreSQL, Redis, Elasticsearch, migration, the API, a worker, and the deterministic provider in a run-owned Compose project. It chooses free local ports unless `E2E_*_PORT` values are supplied, prints the resolved API/provider URLs, and records the project and ports in `output/playwright/runs/<backend-run-id>/environment.txt`. In App mode only, the API binds to all host interfaces so the Simulator can reach it. It blocks until interrupted and then removes its host processes, containers, network, and volumes.
 
 Start Metro with the same local API as described below, then run the package-owned flow with new synthetic data:
 
@@ -104,8 +105,8 @@ Start Metro with the same local API as described below, then run the package-own
 IOS_SIMULATOR_UDID=<simulator-udid> \
 E2E_RUN_ID=<app-run-id> \
 MAESTRO_EXPO_DEV_CLIENT_URL='exp+cove-mobile://expo-development-client/?url=<encoded-metro-url>' \
-MAESTRO_E2E_API_URL=http://127.0.0.1:58000 \
-MAESTRO_E2E_LLM_BASE_URL=http://127.0.0.1:58001/v1 \
+MAESTRO_E2E_API_URL=<printed-app-backend-api-url> \
+MAESTRO_E2E_LLM_BASE_URL=<printed-app-backend-provider-url> \
 MAESTRO_E2E_USERNAME=<synthetic-username> \
 MAESTRO_E2E_PASSWORD=<synthetic-password> \
 MAESTRO_E2E_CHAT_PROMPT=<unique-prompt-at-most-20-characters> \
@@ -121,7 +122,7 @@ Run the navigation/native lifecycle flow against the same local backend and Metr
 IOS_SIMULATOR_UDID=<simulator-udid> \
 E2E_RUN_ID=<app-run-id> \
 MAESTRO_EXPO_DEV_CLIENT_URL='exp+cove-mobile://expo-development-client/?url=<encoded-metro-url>' \
-MAESTRO_E2E_API_URL=http://127.0.0.1:58000 \
+MAESTRO_E2E_API_URL=<printed-app-backend-api-url> \
 MAESTRO_E2E_USERNAME=<synthetic-username> \
 MAESTRO_E2E_EMAIL=<synthetic-email> \
 MAESTRO_E2E_PASSWORD=<synthetic-password> \
@@ -160,7 +161,7 @@ pnpm exec expo start --dev-client --lan --port 8081 --clear --no-dev
 
 Expo SDK 57 development transforms can merge virtual environment values after the shell environment. The `--no-dev` form above was verified in Cove to keep the run-owned URL in the generated bundle. Confirm the resolved URL without printing credentials, then require a request from the Simulator address in the local API logs; a successful host-side request is not sufficient.
 
-Manage only the disposable dependency stack on stable default ports when debugging:
+Manage only the disposable dependency stack when debugging:
 
 ```bash
 make e2e-up
@@ -169,16 +170,16 @@ make e2e-logs
 make e2e-down
 ```
 
-The manual stack uses PostgreSQL `55432`, Redis `56379`, Elasticsearch `59200`, API `58000`, and deterministic provider `58001` by default. Override `E2E_*_PORT` or `E2E_PROJECT` when required.
+`make e2e-up` and the matching manual `logs`/`down` commands use PostgreSQL `55432`, Redis `56379`, Elasticsearch `59200`, API `58000`, and deterministic provider `58001` by default. Automated `e2e-app-backend`, `server-db-smoke`, and browser smoke runs instead use a unique Compose project and free ports unless explicitly overridden. Always pass the URLs printed by the active App-backend run to Metro and the native wrapper.
 
 ## Lifecycle and artifacts
 
 - `e2e/scripts/e2e.sh` is the lifecycle source of truth.
 - The script starts OrbStack when necessary and always runs Compose through `docker --context orbstack`; the Docker CLI is only the OrbStack-compatible client, not the container runtime.
-- The automated commands wait for Compose health, run the real migration, and wait for `/api/health`. The Server command also runs the deterministic provider and its Go scenarios; the browser command additionally starts Vite and runs Playwright serially. `e2e-app-backend` keeps the same local services alive for a native Simulator run.
+- The automated commands wait for Compose health, run the real migration, and wait for `/api/health`. The Server and App-backend commands also start a run-owned worker and deterministic provider; worker readiness and process logs are kept separate. The browser command additionally starts Vite and runs Playwright serially. `e2e-app-backend` keeps the same local services alive for a native Simulator run.
 - Every automated command stops host processes and removes run-owned containers and volumes on success, failure, timeout, or interruption.
 - Set `E2E_KEEP_ENV=1` only for local diagnosis. Clean it later with the same `E2E_PROJECT` value.
-- API, migration, Compose, and backend scenario logs plus browser traces, screenshots, video, and the HTML report are written below `output/playwright/runs/<run-id>/`.
+- The run-owned project, ports, and credential-free URLs are recorded in `environment.txt`. API, worker, migration, provider, Compose, and backend scenario logs plus browser traces, screenshots, video, and the HTML report are written below `output/playwright/runs/<run-id>/`.
 - `output/playwright/latest` points to the most recent run.
 
 The harness never reads the normal Server config or the persistent development Compose stack. Test credentials and data are local, synthetic, and run-owned.

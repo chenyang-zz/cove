@@ -12,6 +12,7 @@ orbstack_context="${E2E_ORBSTACK_CONTEXT:-orbstack}"
 api_pid=""
 web_pid=""
 llm_pid=""
+worker_pid=""
 compose_log=""
 
 command_name="${1:-}"
@@ -40,7 +41,7 @@ free_port() {
   node -e 'const net=require("node:net");const s=net.createServer();s.listen(0,"127.0.0.1",()=>{process.stdout.write(String(s.address().port));s.close();});'
 }
 
-if [[ "${command_name}" == "smoke" || "${command_name}" == "server-db-smoke" ]]; then
+if [[ "${command_name}" == "smoke" || "${command_name}" == "server-db-smoke" || "${command_name}" == "app-backend" ]]; then
   e2e_run_id="${E2E_RUN_ID:-$(date +%Y%m%d%H%M%S)-$$}"
   e2e_project="${E2E_PROJECT:-cove-e2e-${e2e_run_id}}"
   export E2E_POSTGRES_PORT="${E2E_POSTGRES_PORT:-$(free_port)}"
@@ -162,6 +163,31 @@ wait_for_url() {
   return 1
 }
 
+wait_for_log() {
+  local label="$1"
+  local pattern="$2"
+  local pid="$3"
+  local log_file="$4"
+  local timeout_seconds="${E2E_START_TIMEOUT_SECONDS:-120}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS < deadline)); do
+    if grep -q -- "${pattern}" "${log_file}" 2>/dev/null; then
+      return 0
+    fi
+    if [[ -n "${pid}" ]] && ! kill -0 "${pid}" >/dev/null 2>&1; then
+      echo "${label} exited before becoming ready. Last log lines:" >&2
+      tail -n 80 "${log_file}" >&2 || true
+      return 1
+    fi
+    sleep 0.5
+  done
+
+  echo "timed out waiting for ${label} log pattern: ${pattern}" >&2
+  tail -n 80 "${log_file}" >&2 || true
+  return 1
+}
+
 stop_pid() {
   local pid="$1"
   if [[ -z "${pid}" ]] || ! kill -0 "${pid}" >/dev/null 2>&1; then
@@ -181,22 +207,25 @@ run_smoke() {
   api_pid=""
   web_pid=""
   llm_pid=""
+  worker_pid=""
   local api_log="${log_dir}/api.log"
   local web_log="${log_dir}/web.log"
   local migration_log="${log_dir}/migration.log"
   local server_real_db_log="${log_dir}/server-real-db.log"
   local llm_log="${log_dir}/fake-openai.log"
+  local worker_log="${log_dir}/worker.log"
   compose_log="${log_dir}/compose.log"
 
   mkdir -p "${runtime_dir}" "${log_dir}" "${storage_dir}"
   ln -sfn "${run_artifact_dir}" "${artifact_root}/latest"
-  print_environment
+  print_environment | tee "${run_artifact_dir}/environment.txt"
 
   cleanup() {
     local status=$?
     trap - EXIT
     stop_pid "${web_pid}"
     stop_pid "${api_pid}"
+    stop_pid "${worker_pid}"
     stop_pid "${llm_pid}"
     compose logs --no-color >"${compose_log}" 2>&1 || true
     if [[ "${E2E_KEEP_ENV:-0}" != "1" ]]; then
@@ -218,6 +247,7 @@ run_smoke() {
     go build -o "${runtime_dir}/cove-api" ./cmd/api
     if [[ "${command_name}" == "app-backend" || "${command_name}" == "server-db-smoke" ]]; then
       go build -o "${runtime_dir}/cove-fake-openai" ./integration/fakeopenai
+      go build -o "${runtime_dir}/cove-worker" ./cmd/worker
     fi
   )
 
@@ -233,6 +263,12 @@ run_smoke() {
     echo "migration failed. Last log lines:" >&2
     tail -n 80 "${migration_log}" >&2 || true
     return 1
+  fi
+
+  if [[ "${command_name}" == "app-backend" || "${command_name}" == "server-db-smoke" ]]; then
+    server_env "${runtime_dir}/cove-worker" >"${worker_log}" 2>&1 &
+    worker_pid=$!
+    wait_for_log "Cove worker" "Starting processing" "${worker_pid}" "${worker_log}"
   fi
 
   server_env "${runtime_dir}/cove-api" >"${api_log}" 2>&1 &

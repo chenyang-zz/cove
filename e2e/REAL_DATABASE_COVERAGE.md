@@ -10,6 +10,7 @@ The only current frontend product is the Expo App under `packages/app/mobile/`. 
 | Profile and password UI | iOS Simulator → Expo profile screen → API → PostgreSQL | `make app-mobile-e2e-profile-password` | Covered locally | Promote the package-owned Maestro flow to a macOS CI gate and add avatar/object-storage coverage. |
 | Persistent chat and SSE | iOS Simulator → Expo chat/SSE → API → deterministic provider/Redis/PostgreSQL | `make app-mobile-e2e-chat-persistence` | Covered locally | Add multi-turn context, cancellation/error persistence, and tool event rendering. |
 | Navigation and native lifecycle | iOS Simulator → Expo Router/native stack → API/PostgreSQL | `make app-mobile-e2e-native-lifecycle` | Covered locally | Promote to a macOS CI gate; add registration Password AutoFill and attachment-picker/native Markdown scenarios. |
+| Knowledge document upload and parsing | iOS Simulator → native DocumentPicker → Expo App → API/Redis worker/PostgreSQL/local storage/Elasticsearch | `make app-mobile-e2e-knowledge-upload` | Covered locally | Add cancellation, unsupported/oversized files, provider failure/retry, cross-user isolation, and Android coverage. |
 
 ### Recorded App runs
 
@@ -80,9 +81,9 @@ The table below tracks behavior exercised through the workspace-owned OrbStack e
 | Message history and ownership | API Chat/SSE via deterministic provider/Redis → API pagination/ownership → PostgreSQL | `make server-db-smoke` | Covered | Add generated partial/error message persistence and large-history pagination. |
 | Profile and password changes | API profile/password/login/me → PostgreSQL | `make server-db-smoke` | Covered | Add avatar/object-storage coverage and explicit refresh-token revocation if password changes adopt that policy. |
 | Model, agent, persona, MCP, skill, and tool configuration | API → PostgreSQL | — | Missing | Add representative CRUD and cross-user isolation flows. |
-| Knowledge bases and document metadata | API/worker → PostgreSQL/object storage | — | Missing | Add upload, queue completion, and ownership scenarios. |
-| RAG indexing and retrieval | API/worker → PostgreSQL/Redis/Elasticsearch | — | Missing | Add deterministic ingestion, retrieval, and cleanup. |
-| Worker and scheduler tasks | API/scheduler → Redis/asynq → worker → persistence | — | Missing | Add retry, idempotency, and terminal-state scenarios. |
+| Knowledge bases and document metadata | API/worker → PostgreSQL/local object storage | `make server-db-smoke` | Covered locally | Add cross-user document and knowledge-base ownership scenarios. |
+| RAG indexing and retrieval | API/worker → PostgreSQL/Redis/Elasticsearch | `make server-db-smoke` | Covered locally | Add controlled embedding failures, retry/idempotency, and multi-document ranking scenarios. |
+| Worker and scheduler tasks | API → Redis/asynq → worker → persistence | `make server-db-smoke` | Partially covered | Document parsing terminal success is covered; add retry/idempotency, scheduler, and other task types. |
 | Gateway delivery | Gateway → queue/outbox → provider boundary | — | Missing | Add deterministic local provider and duplicate-event scenarios. |
 | Expo App cross-boundary acceptance | `ios-simulator` skill/Maestro → Expo App → API → persistence | `make app-mobile-e2e-profile-password`, `make app-mobile-e2e-chat-persistence` | Partially covered | Continue with navigation/native lifecycle and the remaining auth/chat failure scenarios. |
 
@@ -92,6 +93,7 @@ The table below tracks behavior exercised through the workspace-owned OrbStack e
 2. Expo profile/password flow against the local database environment.
 3. Expo persistent chat and deterministic Chat/SSE creation.
 4. Expo navigation, keyboard, sheet, and native-module lifecycle.
+5. Expo native document selection, upload, worker parsing, and terminal chunk display.
 
 Each App item must follow the `ios-simulator` skill and record an explicit Simulator UDID, the App-visible assertions, screenshot or recording paths, relevant sanitized logs, the first failing layer when applicable, and cleanup status. Skill-driven Computer Use is interactive evidence; mark deterministic automation separately only after a native regression framework owns the scenario.
 

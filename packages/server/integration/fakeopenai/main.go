@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -21,6 +22,11 @@ const (
 type chatCompletionRequest struct {
 	Model  string `json:"model"`
 	Stream bool   `json:"stream"`
+}
+
+type embeddingRequest struct {
+	Model string          `json:"model"`
+	Input json.RawMessage `json:"input"`
 }
 
 type server struct {
@@ -64,7 +70,83 @@ func newHandler(provider server) http.Handler {
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
 	mux.HandleFunc("POST /v1/chat/completions", provider.chatCompletions)
+	mux.HandleFunc("POST /v1/embeddings", provider.embeddings)
 	return mux
+}
+
+func (s server) embeddings(w http.ResponseWriter, request *http.Request) {
+	var input embeddingRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, request.Body, 1<<20))
+	if err := decoder.Decode(&input); err != nil {
+		writeProviderError(w, http.StatusBadRequest, "invalid JSON request")
+		return
+	}
+	if strings.TrimSpace(input.Model) == "" {
+		writeProviderError(w, http.StatusBadRequest, "model is required")
+		return
+	}
+	texts, err := embeddingInputs(input.Input)
+	if err != nil {
+		writeProviderError(w, http.StatusBadRequest, "input must be a non-empty string or string array")
+		return
+	}
+
+	data := make([]map[string]any, 0, len(texts))
+	for index, text := range texts {
+		data = append(data, map[string]any{
+			"object":    "embedding",
+			"embedding": deterministicEmbedding(text),
+			"index":     index,
+		})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"object": "list",
+		"data":   data,
+		"model":  input.Model,
+		"usage": map[string]int{
+			"prompt_tokens": len(texts),
+			"total_tokens":  len(texts),
+		},
+	})
+}
+
+func embeddingInputs(raw json.RawMessage) ([]string, error) {
+	var single string
+	if err := json.Unmarshal(raw, &single); err == nil {
+		if strings.TrimSpace(single) == "" {
+			return nil, errors.New("input is empty")
+		}
+		return []string{single}, nil
+	}
+
+	var batch []string
+	if err := json.Unmarshal(raw, &batch); err != nil || len(batch) == 0 {
+		return nil, errors.New("input has unsupported shape")
+	}
+	for _, text := range batch {
+		if strings.TrimSpace(text) == "" {
+			return nil, errors.New("input contains an empty string")
+		}
+	}
+	return batch, nil
+}
+
+func deterministicEmbedding(text string) []float64 {
+	digest := sha256.Sum256([]byte(text))
+	return []float64{
+		float64(digest[0])/255*2 - 1,
+		float64(digest[1])/255*2 - 1,
+		float64(digest[2])/255*2 - 1,
+	}
+}
+
+func writeProviderError(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"error": map[string]string{"message": message},
+	})
 }
 
 func (s server) chatCompletions(w http.ResponseWriter, request *http.Request) {
