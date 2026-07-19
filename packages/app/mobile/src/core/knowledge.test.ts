@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { listKnowledgeBases, setDefaultKnowledgeBase } from './knowledge';
+import {
+  createKnowledgeBase,
+  getKnowledgeBase,
+  listKnowledgeBases,
+  setDefaultKnowledgeBase,
+  validateKnowledgeBaseInput,
+} from './knowledge';
 
 const api = vi.hoisted(() => ({ authenticatedRequest: vi.fn() }));
 
@@ -42,5 +48,45 @@ describe('knowledge base API', () => {
       '/api/knowledge-base/knowledge-2/default',
       { method: 'POST' },
     );
+  });
+
+  it('creates a knowledge base with trimmed documented fields through authenticated request', async () => {
+    const response = { id: 'knowledge-3', name: '产品资料', description: '说明' };
+    api.authenticatedRequest.mockResolvedValue(response);
+
+    await expect(createKnowledgeBase({ name: '  产品资料  ', description: '  说明  ' })).resolves.toBe(response);
+    expect(api.authenticatedRequest).toHaveBeenCalledWith('/api/knowledge-base', {
+      method: 'POST',
+      body: JSON.stringify({ name: '产品资料', description: '说明' }),
+    });
+  });
+
+  it('omits an empty optional description when creating a knowledge base', async () => {
+    api.authenticatedRequest.mockResolvedValue({ id: 'knowledge-4', name: '空描述' });
+
+    await createKnowledgeBase({ name: '空描述', description: '   ' });
+    expect(api.authenticatedRequest).toHaveBeenCalledWith('/api/knowledge-base', {
+      method: 'POST',
+      body: JSON.stringify({ name: '空描述' }),
+    });
+  });
+
+  it('loads an encoded knowledge base detail through authenticated request', async () => {
+    const response = { id: 'knowledge / 5', name: '团队资料' };
+    api.authenticatedRequest.mockResolvedValue(response);
+
+    await expect(getKnowledgeBase('knowledge / 5')).resolves.toBe(response);
+    expect(api.authenticatedRequest).toHaveBeenCalledWith('/api/knowledge-base/knowledge%20%2F%205');
+  });
+
+  it('validates required name and documented field limits', () => {
+    expect(validateKnowledgeBaseInput({ name: '   ', description: 'a'.repeat(513) })).toEqual({
+      name: '请输入知识库名称。',
+      description: '描述不能超过 512 个字符。',
+    });
+    expect(validateKnowledgeBaseInput({ name: 'a'.repeat(129) })).toEqual({
+      name: '知识库名称不能超过 128 个字符。',
+    });
+    expect(validateKnowledgeBaseInput({ name: '有效名称', description: '说明' })).toEqual({});
   });
 });
