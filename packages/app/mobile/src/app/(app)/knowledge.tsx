@@ -98,10 +98,14 @@ export default function KnowledgeScreen() {
   }, [signOut]);
 
   const openDetail = useCallback((item: KnowledgeBase) => {
-    router.push({
-      pathname: '/(app)/knowledge/[knowledgeBaseId]',
-      params: knowledgeRouteParams(item),
-    });
+    const search = new URLSearchParams({
+      name: item.name,
+      description: item.description ?? '',
+      color: item.color ?? '',
+      doc_count: String(Math.max(0, item.doc_count ?? 0)),
+      chat_enabled: item.chat_enabled ? 'true' : 'false',
+    }).toString();
+    router.push(`/(app)/knowledge/${item.id}?${search}` as Parameters<typeof router.push>[0]);
   }, [router]);
 
   const handleCreated = useCallback((item: KnowledgeBase) => {
@@ -339,17 +343,6 @@ function KnowledgeEmpty({ palette, onCreate }: { palette: Palette; onCreate: () 
       </Pressable>
     </View>
   );
-}
-
-function knowledgeRouteParams(item: KnowledgeBase) {
-  return {
-    knowledgeBaseId: item.id,
-    name: item.name,
-    description: item.description ?? '',
-    color: item.color ?? '',
-    doc_count: String(Math.max(0, item.doc_count ?? 0)),
-    chat_enabled: item.chat_enabled ? 'true' : 'false',
-  };
 }
 
 function KnowledgeSkeleton({ palette }: { palette: Palette }) {
