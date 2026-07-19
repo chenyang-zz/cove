@@ -1,6 +1,8 @@
 package routes
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/boxify/api-go/internal/transport/http/handler"
@@ -52,4 +54,54 @@ func TestRegisterMCPServerRoutesRegistersTogglePathOnly(t *testing.T) {
 	if seen["/api/mcp/:mcp_id/troggle"] {
 		t.Fatalf("POST /api/mcp/:mcp_id/troggle route should not be registered; routes=%+v", router.Routes())
 	}
+}
+
+// TestRegisterKnowledgeBaseRoutesRegistersContractPaths 验证知识库列表与创建接口注册了 OpenAPI 声明的无尾斜杠路径。
+func TestRegisterKnowledgeBaseRoutesRegistersContractPaths(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	api := router.Group("/api")
+
+	RegisterKnowledgeBaseRoutes(api, handler.KnowledgeBaseHandler{}, func(c *gin.Context) {})
+
+	seen := map[string]bool{}
+	for _, route := range router.Routes() {
+		if route.Path == "/api/knowledge-base" {
+			seen[route.Method] = true
+		}
+	}
+	if !seen["GET"] || !seen["POST"] {
+		t.Fatalf("contract routes GET/POST /api/knowledge-base were not both registered; routes=%+v", router.Routes())
+	}
+
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		request := httptest.NewRequest(method, "/api/knowledge-base", nil)
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		if response.Code == http.StatusTemporaryRedirect || response.Code == http.StatusPermanentRedirect {
+			t.Fatalf("%s /api/knowledge-base redirected with status %d", method, response.Code)
+		}
+	}
+}
+
+// TestRegisterDocumentRoutesRegistersContractPath 验证文档列表接口注册了 OpenAPI 声明的无尾斜杠路径。
+func TestRegisterDocumentRoutesRegistersContractPath(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	api := router.Group("/api")
+
+	RegisterDocumentRoutes(api, handler.DocumentHandler{}, func(c *gin.Context) {})
+
+	for _, route := range router.Routes() {
+		if route.Method == "GET" && route.Path == "/api/document" {
+			request := httptest.NewRequest(http.MethodGet, "/api/document?page=1&page_size=20", nil)
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			if response.Code == http.StatusTemporaryRedirect || response.Code == http.StatusPermanentRedirect {
+				t.Fatalf("GET /api/document redirected with status %d", response.Code)
+			}
+			return
+		}
+	}
+	t.Fatalf("contract route GET /api/document was not registered; routes=%+v", router.Routes())
 }

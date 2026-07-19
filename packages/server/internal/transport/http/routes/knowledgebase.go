@@ -23,6 +23,7 @@ func RegisterKnowledgeBaseRoutes(api *gin.RouterGroup, knowledgebase handler.Kno
 	// @auth(user_id)
 	// @description 查询知识库列表
 	// @output response.ListResponse[*response.KnowledgeBaseResponse]
+	knowledgebaseRoutes.GET("", knowledgebase.GetKnowledgeBaseList)
 	knowledgebaseRoutes.GET("/", knowledgebase.GetKnowledgeBaseList)
 	knowledgebaseRoutes.GET("/list", knowledgebase.GetKnowledgeBaseList)
 
@@ -30,6 +31,7 @@ func RegisterKnowledgeBaseRoutes(api *gin.RouterGroup, knowledgebase handler.Kno
 	// @description 创建知识库
 	// @input request.CreateKnowledgeBaseRequest
 	// @output response.KnowledgeBaseResponse
+	knowledgebaseRoutes.POST("", knowledgebase.CreateKnowledgeBase)
 	knowledgebaseRoutes.POST("/", knowledgebase.CreateKnowledgeBase)
 	knowledgebaseRoutes.POST("/create", knowledgebase.CreateKnowledgeBase)
 
