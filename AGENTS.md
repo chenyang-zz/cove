@@ -5,7 +5,7 @@ This workspace is the single Git repository for the Cove project. Product code i
 - `packages/app/`: Cove clients and frontend code.
 - `packages/server/`: Cove backend services and the OpenAPI contract.
 
-Before working, read [.codex/rules/architecture.md](.codex/rules/architecture.md) and [.codex/rules/worktree.md](.codex/rules/worktree.md). Also read the rules for every area touched by the task:
+Before working, read [.codex/rules/architecture.md](.codex/rules/architecture.md), [.codex/rules/worktree.md](.codex/rules/worktree.md), and [.codex/rules/git-workflow.md](.codex/rules/git-workflow.md). Also read the rules for every area touched by the task:
 
 - App work: [.codex/rules/frontend.md](.codex/rules/frontend.md) and `packages/app/AGENTS.md`.
 - Server work: [.codex/rules/backend.md](.codex/rules/backend.md) and `packages/server/AGENTS.md`.

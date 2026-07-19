@@ -27,8 +27,9 @@ Use Codex-managed worktrees for new product feature implementation so concurrent
 
 ## 4. Completion and Handoff
 
+- Follow `.codex/rules/git-workflow.md` throughout implementation. Create the worktree's unique `codex/feature-<slug>-<timestamp>` branch before the first automatic work-unit commit, then commit every completed unit in dependency order.
 - Before handoff, run the applicable App, Server, and E2E validation, then stop all run-owned resources and report the cleanup result.
-- Create a unique `codex/feature-<slug>-<timestamp>` branch in the worktree before committing. Commit the intended files and record the branch name and commit SHA; never leave the only copy of completed work as an uncommitted worktree diff.
+- Record the branch name and ordered commit range at handoff. Never leave the only copy of completed work as an uncommitted worktree diff, and do not squash the work-unit history unless the user explicitly requests it.
 - The coordinating Local task reviews the reported commit and checks that no run-owned resources remain. It must not merge, cherry-pick, push, or delete the feature branch unless the user has authorized that action.
 - After successful validation, commit creation, handoff reporting, and runtime cleanup, the coordinator archives the worktree task. Codex archiving provides a recoverable snapshot and removes the managed worktree automatically.
 - If validation fails, changes remain uncommitted, cleanup cannot establish resource ownership, or the handoff commit is missing, do not archive or force-remove the worktree. Report the blocker and preserve the worktree for recovery.
